@@ -1,0 +1,959 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>Latteria Demo SCADA</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: icon rail + header + pages; hero is the animated process diagram with a slide-in equipment drawer.
+   Palette: graphite-blue control room, milk cream = product, orange/blue = hot/cold utilities, semantic ok/warn/crit. */
+:root{
+  --bg:#0B1116; --rail:#0E161C; --surface:#121C24; --surface2:#182430; --line:#22323F; --line2:#2D4252;
+  --fg:#E9EFF3; --muted:#92A4B1; --faint:#617685;
+  --accent:#7DB4FF; --accent-ink:#071423;
+  --ok:#45D08B; --warn:#F4B544; --crit:#FF5F5F;
+  --ok-bg:rgba(69,208,139,.13); --warn-bg:rgba(244,181,68,.14); --crit-bg:rgba(255,95,95,.15);
+  --milk:#F3EAD3; --milk-flow:#F3EAD3; --warm:#FFB070; --hot:#FF8142; --cold:#6CCDF0;
+  --pipe:#223646; --tank-in:#080D11; --tank-wall:#3A5366; --scrim:rgba(3,8,12,.6);
+  --shadow:0 18px 40px rgba(0,0,0,.45);
+  --f-display:'Bricolage Grotesque','Segoe UI',system-ui,sans-serif;
+  --f-body:'IBM Plex Sans','Segoe UI',system-ui,sans-serif;
+  --f-mono:'IBM Plex Mono',ui-monospace,Menlo,Consolas,monospace;
+  color-scheme:dark;
+}
+@media (prefers-color-scheme:light){
+  :root:not([data-theme="dark"]){
+    --bg:#EDF1F4; --rail:#FFFFFF; --surface:#FFFFFF; --surface2:#F2F5F8; --line:#DAE2E8; --line2:#C3CFD9;
+    --fg:#12202B; --muted:#52667A; --faint:#7B8F9E;
+    --accent:#1F63D6; --accent-ink:#FFFFFF;
+    --ok:#0E8A53; --warn:#A86A00; --crit:#D62F3A;
+    --ok-bg:rgba(14,138,83,.10); --warn-bg:rgba(184,116,0,.11); --crit-bg:rgba(214,47,58,.10);
+    --milk:#FBE7A8; --milk-flow:#C98F1E; --warm:#F0903A; --hot:#E8590C; --cold:#1C8DBA;
+    --pipe:#D3DEE6; --tank-in:#DCE6EC; --tank-wall:#9FB3C2; --scrim:rgba(20,34,46,.35);
+    --shadow:0 18px 40px rgba(20,40,60,.16);
+    color-scheme:light;
+  }
+}
+:root[data-theme="light"]{
+  --bg:#EDF1F4; --rail:#FFFFFF; --surface:#FFFFFF; --surface2:#F2F5F8; --line:#DAE2E8; --line2:#C3CFD9;
+  --fg:#12202B; --muted:#52667A; --faint:#7B8F9E;
+  --accent:#1F63D6; --accent-ink:#FFFFFF;
+  --ok:#0E8A53; --warn:#A86A00; --crit:#D62F3A;
+  --ok-bg:rgba(14,138,83,.10); --warn-bg:rgba(184,116,0,.11); --crit-bg:rgba(214,47,58,.10);
+  --milk:#FBE7A8; --milk-flow:#C98F1E; --warm:#F0903A; --hot:#E8590C; --cold:#1C8DBA;
+  --pipe:#D3DEE6; --tank-in:#DCE6EC; --tank-wall:#9FB3C2; --scrim:rgba(20,34,46,.35);
+  --shadow:0 18px 40px rgba(20,40,60,.16);
+  color-scheme:light;
+}
+
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.45 var(--f-body);-webkit-font-smoothing:antialiased}
+button{font:inherit;color:inherit;cursor:pointer}
+h1,h2,h3,p{margin:0}
+.num{font-variant-numeric:tabular-nums}
+.mono{font-family:var(--f-mono)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* ---------- shell ---------- */
+.app{display:grid;grid-template-columns:76px minmax(0,1fr);min-height:100%}
+.rail{position:sticky;top:env(safe-area-inset-top,0px);height:100vh;display:flex;flex-direction:column;align-items:center;gap:6px;padding:16px 0;background:var(--rail);border-right:1px solid var(--line)}
+.mark{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;margin-bottom:14px;background:linear-gradient(160deg,var(--milk),var(--warm));color:#2A1B08}
+.mark svg{width:22px;height:22px}
+.nav{width:56px;padding:9px 0 7px;border:0;border-radius:12px;background:none;color:var(--muted);display:flex;flex-direction:column;align-items:center;gap:3px;font-size:10.5px;font-weight:500;position:relative;transition:background .2s,color .2s}
+.nav svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.nav:hover{background:var(--surface2);color:var(--fg)}
+.nav[aria-current="page"]{background:var(--surface2);color:var(--accent)}
+.nav[aria-current="page"]::before{content:"";position:absolute;left:-10px;top:12px;bottom:12px;width:3px;border-radius:0 3px 3px 0;background:var(--accent)}
+.nav .badge{position:absolute;top:3px;right:6px;min-width:16px;height:16px;padding:0 4px;border-radius:8px;background:var(--crit);color:#fff;font-size:10px;font-weight:600;line-height:16px;text-align:center}
+.nav .badge[hidden]{display:none}
+.rail .grow{flex:1}
+
+.main{min-width:0;display:flex;flex-direction:column}
+.wrap{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
+.top-in{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:64px;flex-wrap:wrap;padding-block:8px}
+.plant{min-width:0}
+.plant b{display:block;font:700 18px/1.15 var(--f-display);letter-spacing:-.01em}
+.plant span{color:var(--muted);font-size:12px}
+.top-r{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.conn{display:inline-flex;align-items:center;gap:7px;padding:6px 11px;border:1px solid var(--line);border-radius:999px;font-size:12px;color:var(--muted);background:var(--surface)}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 0 var(--ok);animation:ping 2s infinite}
+@keyframes ping{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--ok) 55%,transparent)}80%,100%{box-shadow:0 0 0 8px transparent}}
+.clock{font:500 13px var(--f-mono);color:var(--muted);padding:0 4px}
+.ibtn{display:inline-flex;align-items:center;gap:8px;height:36px;padding:0 12px;border:1px solid var(--line2);background:var(--surface);border-radius:10px;font-size:13px;font-weight:500;transition:background .2s,border-color .2s}
+.ibtn:hover{background:var(--surface2);border-color:var(--faint)}
+.ibtn svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.ibtn.sq{width:36px;padding:0;justify-content:center}
+.alchip{border-color:transparent;background:var(--ok-bg);color:var(--ok)}
+.alchip.warn{background:var(--warn-bg);color:var(--warn)}
+.alchip.crit{background:var(--crit-bg);color:var(--crit);animation:glow 1.3s ease-in-out infinite}
+@keyframes glow{50%{box-shadow:0 0 0 4px color-mix(in srgb,var(--crit) 28%,transparent)}}
+.simwrap{position:relative}
+.menu{position:absolute;right:0;top:44px;z-index:30;width:min(300px,calc(100vw - 32px));background:var(--surface);border:1px solid var(--line2);border-radius:14px;box-shadow:var(--shadow);padding:6px}
+.menu h4{margin:8px 10px 6px;font:500 11px var(--f-body);letter-spacing:.08em;text-transform:uppercase;color:var(--faint)}
+.menu button{width:100%;display:flex;gap:10px;align-items:flex-start;text-align:left;padding:10px;border:0;background:none;border-radius:9px}
+.menu button:hover{background:var(--surface2)}
+.menu button small{display:block;color:var(--muted);font-size:12px}
+.menu .tick{margin-left:auto;width:18px;height:18px;border-radius:50%;border:1.5px solid var(--line2);flex:none;display:grid;place-items:center;font-size:11px}
+.menu button.on .tick{background:var(--crit);border-color:var(--crit);color:#fff}
+.menu hr{border:0;border-top:1px solid var(--line);margin:6px 0}
+
+main{flex:1;padding-block:20px 40px}
+.page[hidden]{display:none}
+.page{display:flex;flex-direction:column;gap:16px;animation:rise .45s ease both}
+@keyframes rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+
+/* ---------- primitives ---------- */
+.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px;min-width:0}
+.card-h{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+.card-h h2{font:700 15px/1.2 var(--f-display);letter-spacing:-.005em}
+.eyebrow{font-size:11px;font-weight:500;letter-spacing:.09em;text-transform:uppercase;color:var(--faint)}
+.pill{display:inline-flex;align-items:center;gap:6px;padding:3px 10px 3px 8px;border-radius:999px;font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;background:var(--surface2);color:var(--muted);white-space:nowrap}
+.pill::before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor}
+.pill.ok{background:var(--ok-bg);color:var(--ok)}
+.pill.warn{background:var(--warn-bg);color:var(--warn)}
+.pill.crit{background:var(--crit-bg);color:var(--crit)}
+.pill.ok::before{animation:blink 2s infinite}
+.pill.crit::before{animation:blink .8s infinite}
+@keyframes blink{50%{opacity:.25}}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chipb{border:1px solid var(--line2);background:none;border-radius:999px;padding:5px 12px;font-size:12px;color:var(--muted);transition:all .2s}
+.chipb:hover{color:var(--fg)}
+.chipb[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:600}
+
+/* ---------- overview ---------- */
+.batch{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:20px;align-items:center;background:
+  radial-gradient(900px 220px at 100% 0,color-mix(in srgb,var(--milk) 10%,transparent),transparent 70%),var(--surface)}
+.batch h1{font:700 clamp(22px,3.2vw,32px)/1.1 var(--f-display);letter-spacing:-.02em;margin:10px 0 6px}
+.batch .meta{color:var(--muted);font-size:12.5px}
+.prog-bar{height:12px;border-radius:6px;background:var(--surface2);overflow:hidden;position:relative}
+.prog-bar i{display:block;height:100%;width:0;border-radius:6px;background:linear-gradient(90deg,var(--warm),var(--milk));transition:width 1s ease;position:relative;overflow:hidden}
+.prog-bar i::after{content:"";position:absolute;inset:0;background:linear-gradient(100deg,transparent 30%,rgba(255,255,255,.55) 50%,transparent 70%);transform:translateX(-100%);animation:sheen 2.6s ease-in-out infinite}
+@keyframes sheen{to{transform:translateX(100%)}}
+.prog-txt{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:10px;color:var(--muted);font-size:12.5px}
+.prog-txt b{font:700 22px var(--f-display);color:var(--fg);letter-spacing:-.01em}
+
+.kpis{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px}
+.kpi{display:flex;flex-direction:column;gap:6px;overflow:hidden;transition:border-color .3s,transform .25s}
+.kpi:hover{transform:translateY(-2px);border-color:var(--line2)}
+.kpi.crit{border-color:color-mix(in srgb,var(--crit) 60%,var(--line))}
+.kpi .v{display:flex;align-items:baseline;gap:5px}
+.kpi .v b{font:700 clamp(26px,2.6vw,34px)/1 var(--f-display);letter-spacing:-.02em}
+.kpi .v span{color:var(--muted);font-size:13px}
+.kpi small{color:var(--muted);font-size:12px}
+.kpi svg.sp{width:100%;height:34px;display:block;margin-top:2px}
+.kpi.crit .v b{color:var(--crit)}
+.ring{display:flex;align-items:center;gap:12px}
+.ring svg{width:64px;height:64px;flex:none}
+.ring circle{fill:none;stroke-width:7}
+.ring .bg{stroke:var(--surface2)}
+.ring .fg{stroke:var(--ok);stroke-linecap:round;transform:rotate(-90deg);transform-origin:50% 50%;transition:stroke-dashoffset 1s ease,stroke .4s}
+
+.grid2{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(0,1fr);gap:16px}
+.chart-wrap{position:relative}
+.chart{width:100%;height:250px;display:block;touch-action:pan-y}
+.chart .grid{stroke:var(--line);stroke-width:1}
+.chart .axis{fill:var(--faint);font:11px var(--f-mono)}
+.chart .lim{stroke-width:1.2;stroke-dasharray:5 4}
+.chart .lim.crit{stroke:var(--crit)}.chart .lim.warn{stroke:var(--warn)}
+.chart .limt{font:500 10.5px var(--f-mono)}
+.chart .limt.crit{fill:var(--crit)}.chart .limt.warn{fill:var(--warn)}
+.chart .ln{fill:none;stroke:var(--c);stroke-width:2.2;stroke-linejoin:round;stroke-linecap:round}
+.chart .hv{stroke:var(--faint);stroke-width:1}
+.chart .pulse{fill:var(--c);opacity:.35;transform-box:fill-box;transform-origin:center;animation:ringp 1.8s ease-out infinite}
+@keyframes ringp{from{transform:scale(.6);opacity:.5}to{transform:scale(2.6);opacity:0}}
+.tip{position:absolute;top:6px;pointer-events:none;background:var(--surface2);border:1px solid var(--line2);border-radius:8px;padding:5px 9px;font:500 12px var(--f-mono);white-space:nowrap;transform:translateX(-50%)}
+.chart-foot{display:flex;gap:18px;flex-wrap:wrap;margin-top:8px;color:var(--muted);font-size:12.5px}
+.chart-foot b{color:var(--fg);font:500 13px var(--f-mono)}
+
+.steps{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.step{display:grid;grid-template-columns:22px minmax(0,1fr) auto;gap:12px;align-items:start;position:relative;padding-bottom:16px}
+.step:last-child{padding-bottom:0}
+.step::before{content:"";position:absolute;left:10px;top:22px;bottom:0;width:2px;background:repeating-linear-gradient(180deg,var(--line2) 0 4px,transparent 4px 8px);background-size:2px 8px;animation:down 1s linear infinite}
+.step:last-child::before{display:none}
+@keyframes down{to{background-position:0 8px}}
+.sd{width:22px;height:22px;border-radius:50%;border:2px solid var(--ok);display:grid;place-items:center;background:var(--surface)}
+.sd::after{content:"";width:8px;height:8px;border-radius:50%;background:var(--ok)}
+.step.warn .sd{border-color:var(--warn)}.step.warn .sd::after{background:var(--warn)}
+.step.crit .sd{border-color:var(--crit);animation:glow 1.2s infinite}.step.crit .sd::after{background:var(--crit)}
+.step b{font-weight:600}
+.step small{display:block;color:var(--muted);font-size:12px}
+.step .sv{font:500 13px var(--f-mono);text-align:right}
+
+.evs{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.ev{display:grid;grid-template-columns:78px 10px minmax(0,1fr) auto;gap:12px;align-items:baseline;padding:9px 0;border-top:1px solid var(--line);animation:rise .4s ease both}
+.ev:first-child{border-top:0}
+.ev time{font:12px var(--f-mono);color:var(--muted)}
+.ev i{width:8px;height:8px;border-radius:50%;background:var(--faint);align-self:center}
+.ev.warn i{background:var(--warn)}.ev.crit i{background:var(--crit)}.ev.ok i{background:var(--ok)}
+.ev .tg{font:11.5px var(--f-mono);color:var(--faint)}
+
+/* ---------- scada ---------- */
+.sc-card{padding:0;overflow:hidden}
+.sc-head{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;padding:14px 16px;border-bottom:1px solid var(--line)}
+.sc-scroll{overflow-x:auto;overscroll-behavior-x:contain;background:
+  radial-gradient(circle at 1px 1px,var(--line) 1px,transparent 1.2px) 0 0/24px 24px}
+.scada{display:block;width:100%;min-width:980px;height:auto}
+.legend{display:flex;gap:16px;flex-wrap:wrap;padding:12px 16px;border-top:1px solid var(--line);color:var(--muted);font-size:12px}
+.legend span{display:inline-flex;align-items:center;gap:7px}
+.legend i{width:18px;height:0;border-top:4px dotted var(--c)}
+.hint{display:none;color:var(--faint);font-size:12px}
+.scada .pipe{fill:none;stroke:var(--pipe);stroke-width:12;stroke-linecap:round;stroke-linejoin:round}
+.scada .flow{fill:none;stroke-width:4;stroke-dasharray:1 15;stroke-linecap:round;animation:flow var(--spd,1s) linear infinite;transition:opacity .4s}
+.scada .flow.milk{stroke:var(--milk-flow)}.scada .flow.warm{stroke:var(--warm)}.scada .flow.hot{stroke:var(--hot)}.scada .flow.cold{stroke:var(--cold)}.scada .flow.bad{stroke:var(--crit)}
+.scada .flow.off{opacity:0;animation-play-state:paused}
+@keyframes flow{to{stroke-dashoffset:-16}}
+.scada .tank{fill:var(--tank-in)}
+.scada .wall{fill:none;stroke:var(--tank-wall);stroke-width:3}
+.scada .milkf{fill:var(--milk)}
+.scada .milkf2{fill:var(--milk);opacity:.55}
+.scada .liq{transition:transform 1.4s cubic-bezier(.3,.7,.3,1)}
+.scada .wv1{animation:wave 4s linear infinite}
+.scada .wv2{animation:wave 6.5s linear infinite reverse}
+@keyframes wave{to{transform:translateX(-80px)}}
+.scada .ttl{fill:var(--muted);font:600 11px var(--f-body);letter-spacing:.09em}
+.scada .sub{fill:var(--faint);font:11px var(--f-mono)}
+.scada .chip rect{fill:var(--surface2);stroke:var(--line2);stroke-width:1}
+.scada .chip .l{fill:var(--muted);font:11px var(--f-body)}
+.scada .chip .v{fill:var(--fg);font:500 12.5px var(--f-mono)}
+.scada .body{fill:var(--surface2);stroke:var(--tank-wall);stroke-width:2.5}
+.scada .imp{transform-box:fill-box;transform-origin:center;animation:spin .9s linear infinite}
+.scada .imp.stop{animation-play-state:paused}
+.scada .imp path{stroke:var(--accent);stroke-width:5;stroke-linecap:round;fill:none}
+.scada .imp circle{fill:var(--accent)}
+@keyframes spin{to{transform:rotate(360deg)}}
+.scada .plate{animation:shim 2.4s ease-in-out infinite}
+.scada .plate.h{fill:var(--hot)}.scada .plate.p{fill:var(--milk)}
+@keyframes shim{0%,100%{opacity:.25}50%{opacity:.85}}
+.scada .valve{fill:var(--ok);transition:fill .3s}
+.scada .valve.div{fill:var(--crit)}
+.scada .belt{fill:var(--pipe)}
+.scada .beltl{stroke:var(--tank-wall);stroke-width:2;stroke-dasharray:6 18;animation:belt var(--bs,1.4s) linear infinite}
+@keyframes belt{to{stroke-dashoffset:-24}}
+.scada .btb{fill:none;stroke:var(--tank-wall);stroke-width:2}
+.scada .btf{fill:var(--milk)}
+.scada .btc{fill:var(--accent)}
+.scada .halo{fill:none;stroke:transparent;stroke-width:2;stroke-dasharray:5 4}
+.scada .eq{cursor:pointer;outline:none}
+.scada .eq:hover .halo,.scada .eq:focus-visible .halo{stroke:var(--accent)}
+.scada .eq.warn .halo{stroke:var(--warn)}
+.scada .eq.crit .halo{stroke:var(--crit);animation:halo 1s ease-in-out infinite}
+@keyframes halo{50%{stroke-opacity:.2}}
+.scada .rtl{fill:var(--crit);font:600 11px var(--f-body);letter-spacing:.1em;opacity:0;transition:opacity .3s}
+.scada .rtl.on{opacity:1;animation:blink 1s infinite}
+.scada .ccp.crit rect{stroke:var(--crit);fill:var(--crit-bg)}
+
+/* ---------- drawer ---------- */
+.scrim{position:fixed;inset:0;background:var(--scrim);opacity:0;pointer-events:none;transition:opacity .3s;z-index:40}
+.scrim.on{opacity:1;pointer-events:auto}
+.drawer{position:fixed;z-index:50;top:0;right:0;bottom:0;width:min(400px,100%);background:var(--surface);border-left:1px solid var(--line2);box-shadow:var(--shadow);transform:translateX(105%);transition:transform .38s cubic-bezier(.2,.8,.2,1);display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);visibility:hidden}
+.drawer.on{transform:none;visibility:visible}
+.dr-h{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;padding:18px 18px 12px}
+.dr-h h3{font:700 20px/1.15 var(--f-display);letter-spacing:-.01em;margin-top:4px}
+.dr-b{padding:0 18px 18px;overflow:auto;display:flex;flex-direction:column;gap:16px}
+.mets{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.met{background:var(--surface2);border-radius:10px;padding:10px}
+.met small{display:block;color:var(--muted);font-size:11.5px;margin-bottom:3px}
+.met b{font:700 20px/1.1 var(--f-display)}
+.met span{color:var(--muted);font-size:12px;margin-left:2px}
+.dr-sp{width:100%;height:80px;display:block}
+.hold{position:relative;width:100%;display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:12px;border:1px solid var(--line2);background:var(--surface2);text-align:left;overflow:hidden;user-select:none;touch-action:none}
+.hold::before{content:"";position:absolute;inset:0;background:color-mix(in srgb,var(--crit) 28%,transparent);transform:scaleX(var(--p,0));transform-origin:left}
+.hold > *{position:relative}
+.hold small{display:block;color:var(--muted);font-size:12px}
+.hold:disabled{opacity:.5;cursor:not-allowed}
+.xbtn{width:34px;height:34px;border-radius:10px;border:1px solid var(--line2);background:none;font-size:18px;line-height:1}
+.xbtn:hover{background:var(--surface2)}
+
+/* ---------- haccp ---------- */
+.ccps{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.ccp{display:flex;flex-direction:column;gap:10px}
+.ccp .row{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+.ccp .big{font:700 34px/1 var(--f-display);letter-spacing:-.02em}
+.ccp .big span{font-size:15px;color:var(--muted);font-weight:500;margin-left:3px}
+.ccp .lim{color:var(--muted);font-size:12.5px}
+.ccp.crit{border-color:color-mix(in srgb,var(--crit) 60%,var(--line))}
+.cells{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.cell{display:grid;grid-template-columns:44px minmax(0,1fr);gap:14px}
+.thermo{position:relative;width:34px;height:150px;border-radius:17px 17px 17px 17px;background:var(--surface2);border:1px solid var(--line2);overflow:hidden;justify-self:center}
+.thermo i{position:absolute;left:0;right:0;bottom:0;background:linear-gradient(0deg,var(--cold),color-mix(in srgb,var(--cold) 50%,#fff));transition:height 1s ease,background .5s}
+.thermo.warn i{background:linear-gradient(0deg,var(--warn),var(--warm))}
+.thermo.crit i{background:linear-gradient(0deg,var(--crit),var(--hot))}
+.thermo b{position:absolute;left:0;right:0;border-top:1.5px dashed var(--faint)}
+.cell .info{display:flex;flex-direction:column;gap:8px;min-width:0}
+.cell .big{font:700 32px/1 var(--f-display);letter-spacing:-.02em}
+.cell .big span{font-size:15px;color:var(--muted);font-weight:500}
+.cell svg.sp{width:100%;height:38px}
+.cell .door{display:flex;gap:6px;flex-wrap:wrap}
+.two{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.3fr);gap:16px}
+.cip{display:flex;flex-direction:column;gap:0}
+.cipstep{display:grid;grid-template-columns:22px minmax(0,1fr) auto;gap:12px;align-items:center;padding:8px 0;position:relative}
+.cipstep .ck{width:22px;height:22px;border-radius:50%;background:var(--ok-bg);color:var(--ok);display:grid;place-items:center;font-size:12px;font-weight:700}
+.cipstep span{font:12px var(--f-mono);color:var(--muted)}
+.cd{font:700 30px var(--f-display);letter-spacing:-.01em}
+.tw{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;font-weight:500;color:var(--faint);font-size:11px;letter-spacing:.08em;text-transform:uppercase;padding:0 12px 8px 0;white-space:nowrap}
+td{padding:10px 12px 10px 0;border-top:1px solid var(--line);white-space:nowrap}
+td.mono{font-size:12.5px}
+
+/* ---------- alarms ---------- */
+.acount{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.acount .card{display:flex;align-items:center;gap:14px}
+.acount b{font:700 36px/1 var(--f-display)}
+.acount small{color:var(--muted)}
+.alist{display:flex;flex-direction:column;gap:8px}
+.arow{display:grid;grid-template-columns:4px 92px minmax(0,1fr) auto;gap:14px;align-items:center;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px 12px 0;overflow:hidden;animation:rise .35s ease both}
+.arow .st{align-self:stretch;background:var(--faint)}
+.arow.warn .st{background:var(--warn)}.arow.crit .st{background:var(--crit)}
+.arow.crit.un{background:linear-gradient(90deg,var(--crit-bg),transparent 60%),var(--surface)}
+.arow.cleared{opacity:.62}
+.arow time{font:12.5px var(--f-mono);color:var(--muted)}
+.arow .tx{min-width:0}
+.arow .tx b{font-weight:500;display:block}
+.arow .tx small{font:12px var(--f-mono);color:var(--faint)}
+.empty{padding:36px 16px;text-align:center;color:var(--muted);border:1px dashed var(--line2);border-radius:12px}
+.btn{height:34px;padding:0 14px;border-radius:9px;border:1px solid var(--line2);background:var(--surface2);font-size:13px;font-weight:500;white-space:nowrap}
+.btn:hover{border-color:var(--faint)}
+.btn.pri{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+
+/* ---------- toasts ---------- */
+.toasts{position:fixed;z-index:60;top:calc(72px + env(safe-area-inset-top,0px));right:max(16px,env(safe-area-inset-right,0px));display:flex;flex-direction:column;gap:8px;width:min(360px,calc(100vw - 32px));pointer-events:none}
+.toast{pointer-events:auto;display:grid;grid-template-columns:4px minmax(0,1fr);background:var(--surface);border:1px solid var(--line2);border-radius:12px;box-shadow:var(--shadow);overflow:hidden;animation:tin .45s cubic-bezier(.2,.9,.3,1.2) both}
+.toast.out{animation:tout .3s ease both}
+.toast .st{background:var(--warn)}.toast.crit .st{background:var(--crit)}.toast.ok .st{background:var(--ok)}
+.toast div{padding:10px 12px}
+.toast b{display:block;font-size:12px;letter-spacing:.07em;text-transform:uppercase;color:var(--warn)}
+.toast.crit b{color:var(--crit)}.toast.ok b{color:var(--ok)}
+.toast span{font-size:13px}
+@keyframes tin{from{transform:translateX(120%) rotate(2deg);opacity:0}}
+@keyframes tout{to{transform:translateX(120%);opacity:0}}
+
+.tabbar{display:none}
+
+/* ---------- responsive ---------- */
+@media (max-width:1180px){
+  .kpis{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .grid2,.two{grid-template-columns:minmax(0,1fr)}
+}
+@media (max-width:820px){
+  .app{grid-template-columns:minmax(0,1fr)}
+  .rail{display:none}
+  .tabbar{display:grid;grid-template-columns:repeat(4,1fr);position:fixed;z-index:30;left:0;right:0;bottom:0;background:var(--rail);border-top:1px solid var(--line);padding:6px max(8px,env(safe-area-inset-right,0px)) calc(6px + env(safe-area-inset-bottom,0px)) max(8px,env(safe-area-inset-left,0px))}
+  .tabbar .nav{width:100%}
+  .tabbar .nav[aria-current="page"]::before{left:22%;right:22%;top:-7px;bottom:auto;width:auto;height:3px;border-radius:0 0 3px 3px}
+  main{padding-bottom:96px}
+  .batch{grid-template-columns:minmax(0,1fr)}
+  .ccps,.cells,.acount{grid-template-columns:minmax(0,1fr)}
+  .ibtn .lbl{display:none}
+  .ibtn.simb{padding:0;width:36px;justify-content:center}
+  .conn .txt{display:none}
+  .hint{display:inline}
+  .drawer{top:auto;left:0;right:0;width:100%;max-height:82%;border-left:0;border-top:1px solid var(--line2);border-radius:18px 18px 0 0;transform:translateY(105%)}
+  .drawer.on{transform:none}
+  .arow{grid-template-columns:4px minmax(0,1fr);padding:12px 14px 12px 0}
+  .arow time{grid-column:2}.arow .tx{grid-column:2}.arow .acts{grid-column:2}
+  .ev{grid-template-columns:64px 10px minmax(0,1fr)}.ev .tg{display:none}
+  .toasts{top:calc(64px + env(safe-area-inset-top,0px))}
+}
+@media (max-width:560px){
+  .kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .kpi.wide{grid-column:span 2}
+  .mets{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .clock{display:none}
+}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation:none!important;transition:none!important}
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="rail" id="rail" aria-label="Navigazione"></aside>
+  <div class="main">
+    <header class="top">
+      <div class="top-in wrap">
+        <div class="plant"><b>Latteria Demo</b><span>Stabilimento 01 · Linea 2 · Latte fresco</span></div>
+        <div class="top-r">
+          <span class="conn"><i class="dot"></i><span class="txt">OPC UA · <span class="mono" id="lat">22 ms</span></span></span>
+          <span class="clock" id="clock">--:--:--</span>
+          <button class="ibtn alchip" id="alchip" aria-label="Allarmi attivi"><svg viewBox="0 0 24 24"><path d="M6 16V11a6 6 0 1112 0v5l1.5 2h-15z"/><path d="M10 21h4"/></svg><span id="alnum">Nessun allarme</span></button>
+          <div class="simwrap">
+            <button class="ibtn simb" id="simbtn" aria-haspopup="true" aria-expanded="false"><svg viewBox="0 0 24 24"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg><span class="lbl">Simula guasto</span></button>
+            <div class="menu" id="simmenu" hidden></div>
+          </div>
+          <button class="ibtn sq" id="themebtn" aria-label="Cambia tema"><svg viewBox="0 0 24 24" id="themeico"></svg></button>
+        </div>
+      </div>
+    </header>
+
+    <main class="wrap">
+      <!-- PANORAMICA -->
+      <section class="page" id="p-panoramica">
+        <div class="card batch">
+          <div>
+            <span class="pill ok" id="lineState">In produzione</span>
+            <h1>Latte fresco intero 1 L</h1>
+            <div class="meta mono">Lotto L2610-0457 · Ricetta R-014 · Turno A 06:00–14:00</div>
+          </div>
+          <div>
+            <div class="prog-bar"><i id="batchBar"></i></div>
+            <div class="prog-txt"><span><b class="num" id="batchDone">0</b> / 24.000 bottiglie</span><span id="batchEta" class="num">Fine stimata --:--</span></div>
+          </div>
+        </div>
+
+        <div class="kpis">
+          <div class="card kpi" id="k-oee"><span class="eyebrow">OEE linea</span>
+            <div class="ring"><svg viewBox="0 0 64 64"><circle class="bg" cx="32" cy="32" r="26"/><circle class="fg" id="oeering" cx="32" cy="32" r="26" stroke-dasharray="163.4" stroke-dashoffset="163.4"/></svg>
+              <div><div class="v"><b class="num" id="v-oee">0</b><span>%</span></div><small>obiettivo 85 %</small></div></div></div>
+          <div class="card kpi" id="k-flow"><span class="eyebrow">Portata latte</span><div class="v"><b class="num" id="v-flow">0</b><span>L/h</span></div><small>Pompa P-101</small><svg class="sp" id="sp-flow" preserveAspectRatio="none"></svg></div>
+          <div class="card kpi" id="k-temp"><span class="eyebrow">Pastorizzazione · CCP1</span><div class="v"><b class="num" id="v-temp">0</b><span>°C</span></div><small id="s-temp">Limite minimo 72,0 °C</small><svg class="sp" id="sp-temp" preserveAspectRatio="none"></svg></div>
+          <div class="card kpi" id="k-bpm"><span class="eyebrow">Riempitrice</span><div class="v"><b class="num" id="v-bpm">0</b><span>bt/min</span></div><small>Bottiglie da 1 L</small><svg class="sp" id="sp-bpm" preserveAspectRatio="none"></svg></div>
+          <div class="card kpi wide" id="k-pow"><span class="eyebrow">Potenza assorbita</span><div class="v"><b class="num" id="v-pow">0</b><span>kW</span></div><small id="s-pow">0,00 kWh per litro</small><svg class="sp" id="sp-pow" preserveAspectRatio="none"></svg></div>
+        </div>
+
+        <div class="grid2">
+          <div class="card">
+            <div class="card-h"><h2>Andamento ultimi 2 minuti</h2><div class="chips" id="serieschips" role="group" aria-label="Grandezza"></div></div>
+            <div class="chart-wrap"><svg class="chart" id="chart" role="img" aria-label="Grafico andamento"></svg><div class="tip" id="tip" hidden></div></div>
+            <div class="chart-foot" id="chartfoot"></div>
+          </div>
+          <div class="card">
+            <div class="card-h"><h2>Stato linea</h2><span class="eyebrow">Ricevimento → cella</span></div>
+            <ol class="steps" id="steps"></ol>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-h"><h2>Eventi recenti</h2><button class="btn" data-go="allarmi">Vai agli allarmi</button></div>
+          <ul class="evs" id="evs"></ul>
+        </div>
+      </section>
+
+      <!-- SINOTTICO -->
+      <section class="page" id="p-sinottico" hidden>
+        <div class="card sc-card">
+          <div class="sc-head">
+            <div><h2 style="font:700 15px var(--f-display)">Sinottico di processo · Linea 2</h2><span class="hint">Scorri il disegno in orizzontale</span></div>
+            <span class="eyebrow">Tocca un componente per i dettagli</span>
+          </div>
+          <div class="sc-scroll"><svg class="scada" id="scada" viewBox="0 0 1240 560" role="group" aria-label="Sinottico di processo"></svg></div>
+          <div class="legend">
+            <span style="--c:var(--milk-flow)"><i></i>Latte</span>
+            <span style="--c:var(--warm)"><i></i>Latte in pastorizzazione</span>
+            <span style="--c:var(--hot)"><i></i>Acqua calda 82 °C</span>
+            <span style="--c:var(--cold)"><i></i>Glicole freddo</span>
+            <span style="--c:var(--crit)"><i></i>Ricircolo (non conforme)</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- HACCP -->
+      <section class="page" id="p-haccp" hidden>
+        <div class="ccps" id="ccps"></div>
+        <div class="card-h" style="margin:4px 0 -4px"><h2 style="font:700 16px var(--f-display)">Celle frigorifere</h2><span class="eyebrow">Limite ≤ 4,5 °C · allarme sopra 5,5 °C</span></div>
+        <div class="cells" id="cells"></div>
+        <div class="two">
+          <div class="card">
+            <div class="card-h"><h2>Lavaggio CIP</h2><span class="pill ok">Conforme</span></div>
+            <div class="eyebrow">Prossimo ciclo tra</div>
+            <div class="cd num" id="cipcd">--:--:--</div>
+            <div class="cip" id="cip" style="margin-top:8px"></div>
+          </div>
+          <div class="card">
+            <div class="card-h"><h2>Tracciabilità lotti</h2><span class="eyebrow">Ultime 24 h</span></div>
+            <div class="tw"><table>
+              <thead><tr><th>Lotto</th><th>Prodotto</th><th>Bottiglie</th><th>CCP1</th><th>Stato</th></tr></thead>
+              <tbody id="lots"></tbody>
+            </table></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ALLARMI -->
+      <section class="page" id="p-allarmi" hidden>
+        <div class="acount" id="acount"></div>
+        <div class="card-h" style="margin:4px 0 -4px">
+          <div class="chips" id="afilter" role="group" aria-label="Filtro allarmi"></div>
+          <button class="btn pri" id="ackall">Riconosci tutti</button>
+        </div>
+        <div class="alist" id="alist"></div>
+      </section>
+    </main>
+  </div>
+</div>
+
+<nav class="tabbar" id="tabbar" aria-label="Navigazione"></nav>
+<div class="scrim" id="scrim"></div>
+<aside class="drawer" id="drawer" aria-label="Dettaglio componente"></aside>
+<div class="toasts" id="toasts" aria-live="polite"></div>
+
+<script>
+(() => {
+'use strict';
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+const rnd = (a, b) => a + Math.random() * (b - a);
+const fmt = (v, d = 0) => v.toLocaleString('it-IT', { minimumFractionDigits: d, maximumFractionDigits: d });
+const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const store = { get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} } };
+
+/* ================= STATE ================= */
+const N = 120;
+const S = {
+  t101: 74, t102: 61, manual: true, trip: false, flow: 4180, temp: 74.3, tin: 5.9, tout: 4.1, hot: 82.1,
+  bpm: 118, power: 192, oee: 87.4, cells: [3.8, 4.1, 4.9], fdv: false,
+  done: 18420, goal: 24000, f: { temp: false, cold: false, level: false }
+};
+const H = { c0: [], c1: [], temp: [], flow: [], cell: [], power: [], bpm: [], t101: [], t102: [] };
+const seed = (k, f) => { for (let i = 0; i < N; i++) H[k].push(f(i)); };
+seed('temp', () => 74.2 + rnd(-.25, .25)); seed('flow', () => 4180 + rnd(-60, 60)); seed('cell', () => 4.9 + rnd(-.15, .15)); seed('c0', () => 3.8 + rnd(-.1, .1)); seed('c1', () => 4.1 + rnd(-.1, .1));
+seed('power', () => 190 + rnd(-6, 6)); seed('bpm', () => 118 + rnd(-1, 1)); seed('t101', () => 74 + rnd(-.3, .3)); seed('t102', () => 61 + rnd(-.3, .3));
+const flowOn = () => S.manual && !S.trip && S.flow > 80;
+
+const A = []; let rev = 1; let filter = 'attivi';
+const LOG = [];
+const ago = m => new Date(Date.now() - m * 60000);
+const quiet = id => { const c = A.find(a => a.id === id && a.active); if (c) { c.active = false; c.t1 = new Date(); rev++; } };
+const logEv = (sev, text, tag, t) => { LOG.unshift({ t: t || new Date(), sev, text, tag }); if (LOG.length > 40) LOG.pop(); rev++; };
+[['ok', 'Avviato lotto L2610-0457 · ricetta R-014', 'LINEA 2', 238], ['ok', 'Lavaggio CIP concluso · conducibilità finale 0,8 mS/cm', 'CIP-01', 410], ['warn', 'Cella 2 · temperatura rientrata sotto 5,5 °C', 'CF-02', 96]]
+  .forEach(([s, t, g, m]) => LOG.push({ t: ago(m), sev: s, text: t, tag: g }));
+A.push({ id: 'h1', sev: 'warn', text: 'Cella 2 · temperatura sopra 5,5 °C (apertura prolungata porta)', tag: 'CF-02 · TT-02', t0: ago(104), t1: ago(96), ack: true, active: false });
+A.push({ id: 'h2', sev: 'warn', text: 'Livello basso serbatoio T-102 (< 15 %)', tag: 'T-102 · LT-102', t0: ago(212), t1: ago(205), ack: true, active: false });
+
+const tfmt = t => {
+  const d = new Date(t), now = new Date();
+  const hm = d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  return d.toDateString() === now.toDateString() ? hm : 'ieri ' + hm.slice(0, 5);
+};
+
+function setAlarm(id, sev, text, tag) {
+  const cur = A.find(a => a.id === id && a.active);
+  if (!sev) { if (cur) { cur.active = false; cur.t1 = new Date(); rev++; logEv('ok', text || cur.text + ' · rientrato', tag || cur.tag); } return; }
+  if (!cur) {
+    A.unshift({ id, sev, text, tag, t0: new Date(), ack: false, active: true }); rev++;
+    logEv(sev, text, tag); toast(sev, text);
+  } else if (cur.sev !== sev) {
+    cur.sev = sev; cur.text = text; cur.ack = false; rev++; logEv(sev, text, tag); toast(sev, text);
+  }
+}
+
+/* ================= SIMULATION ================= */
+function tick() {
+  const f = S.f, on = S.manual && !S.trip;
+  S.t101 = f.level ? Math.max(0, S.t101 - 2.4) : S.t101 + (74 - S.t101) * .04 + rnd(-.12, .12);
+  if (S.t101 < 8 && !S.trip) { S.trip = true; }
+  const tf = on ? 4180 : 0;
+  S.flow += (tf - S.flow) * .35 + (on ? rnd(-25, 25) : 0); if (S.flow < 5) S.flow = 0;
+  const running = S.flow > 500;
+  const tt = !on ? 38 : (f.temp ? 69.2 : 74.2);
+  S.temp += (tt - S.temp) * (on ? .15 : .06) + rnd(-.08, .08);
+  S.tin = 5.9 + rnd(-.1, .1); S.hot = 82 + rnd(-.3, .3); S.tout = 4.1 + rnd(-.05, .05);
+  if (running) { if (!S.fdv && S.temp < 72) S.fdv = true; else if (S.fdv && S.temp >= 72.6) S.fdv = false; }
+  else S.fdv = false;
+  S.t102 = clamp(S.t102 + (S.fdv ? -.32 : (running ? .12 : 0)) - (S.bpm > 5 ? .1 : 0) + rnd(-.05, .05), 0, 96);
+  const bt = (S.t102 > 6 && S.t101 > 0) ? 118 : 0;
+  S.bpm += (bt - S.bpm) * .25 + rnd(-.8, .8); if (S.bpm < 1) S.bpm = 0;
+  S.power += ((118 + S.flow * .015 + S.bpm * .2) - S.power) * .3 + rnd(-2, 2);
+  const oeeT = !on ? 0 : S.fdv ? 58 : f.level ? 70 : 87.4;
+  S.oee += (oeeT - S.oee) * .12 + rnd(-.1, .1);
+  S.cells[0] += (3.8 - S.cells[0]) * .1 + rnd(-.05, .05);
+  S.cells[1] += (4.1 - S.cells[1]) * .1 + rnd(-.05, .05);
+  S.cells[2] += ((f.cold ? 9.4 : 4.9) - S.cells[2]) * (f.cold ? .04 : .08) + rnd(-.05, .05);
+  S.done = Math.min(S.goal, S.done + S.bpm / 60);
+
+  // alarms
+  if (running && S.temp < 72) { quiet('ccp1w'); setAlarm('ccp1', 'crit', 'CCP1 · Temperatura di pastorizzazione sotto 72,0 °C: prodotto deviato in ricircolo', 'PX-201 · TT-01'); }
+  else if (running && S.temp < 73.2) { setAlarm('ccp1', null); setAlarm('ccp1w', 'warn', 'Temperatura di pastorizzazione in calo (< 73,2 °C)', 'PX-201 · TT-01'); }
+  else if (!S.fdv || S.temp >= 72.6) { setAlarm('ccp1', null, 'CCP1 · Temperatura di pastorizzazione ripristinata, valvola FDV-201 in avanti', 'PX-201 · TT-01'); if (S.temp >= 73.5) setAlarm('ccp1w', null); }
+  setAlarm('lvl', S.t101 < 20 && S.t101 > 0 ? 'warn' : (S.trip && S.t101 < 25 ? 'warn' : null), 'Livello basso serbatoio T-101 (< 20 %)', 'T-101 · LT-101');
+  if (S.trip && S.t101 >= 25 && !f.level) { S.trip = false; setAlarm('trip', null, 'Pompa P-101 riarmata, livello T-101 ripristinato', 'P-101'); }
+  setAlarm('trip', S.trip ? 'crit' : null, 'Pompa P-101 arrestata: protezione marcia a secco', 'P-101');
+  setAlarm('low102', S.t102 < 15 ? 'warn' : null, 'Livello basso serbatoio T-102 (< 15 %)', 'T-102 · LT-102');
+  S.cells.forEach((c, i) => setAlarm('cell' + i, c > 7 ? 'crit' : c > 5.5 ? 'warn' : null,
+    c > 7 ? `Cella ${i + 1} · temperatura sopra 7,0 °C: porta aperta, merce a rischio` : `Cella ${i + 1} · temperatura sopra 5,5 °C`, `CF-0${i + 1} · TT-0${i + 1}`));
+
+  const push = (k, v) => { H[k].push(v); if (H[k].length > N) H[k].shift(); };
+  push('temp', S.temp); push('flow', S.flow); push('cell', S.cells[2]); push('c0', S.cells[0]); push('c1', S.cells[1]); push('power', S.power); push('bpm', S.bpm); push('t101', S.t101); push('t102', S.t102);
+  render();
+}
+
+/* ================= HELPERS: numbers, sparklines ================= */
+function tween(el, v, d = 0) {
+  if (!el) return;
+  const from = el._v ?? v; el._v = v; el._d = d;
+  if (RM || from === v) { el.textContent = fmt(v, d); return; }
+  const t0 = performance.now(), dur = 700;
+  cancelAnimationFrame(el._r);
+  const step = now => { const k = clamp((now - t0) / dur, 0, 1), e = 1 - Math.pow(1 - k, 3); el.textContent = fmt(from + (v - from) * e, d); if (k < 1) el._r = requestAnimationFrame(step); };
+  el._r = requestAnimationFrame(step);
+}
+function spark(svg, data, color, n = 60) {
+  if (!svg) return;
+  const d = data.slice(-n); let mn = Math.min(...d), mx = Math.max(...d); const minSpan = Math.max(Math.abs((mn + mx) / 2) * .05, 1e-3); if (mx - mn < minSpan) { const c0 = (mn + mx) / 2; mn = c0 - minSpan / 2; mx = c0 + minSpan / 2; }
+  const pad = (mx - mn) * .15; mn -= pad; mx += pad;
+  const pts = d.map((v, i) => [i / (d.length - 1) * 100, 28 - (v - mn) / (mx - mn) * 26]);
+  const l = pts.map((p, i) => (i ? 'L' : 'M') + p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join('');
+  svg.setAttribute('viewBox', '0 0 100 30');
+  svg.innerHTML = `<defs><linearGradient id="g${svg.id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:${color};stop-opacity:.32"/><stop offset="1" style="stop-color:${color};stop-opacity:0"/></linearGradient></defs>
+  <path d="${l}L100 30L0 30Z" fill="url(#g${svg.id})"/><path d="${l}" fill="none" style="stroke:${color}" stroke-width="1.8" vector-effect="non-scaling-stroke" stroke-linejoin="round"/>`;
+}
+
+/* ================= CHART ================= */
+const SERIES = {
+  temp: { label: 'Temperatura pastorizzazione', unit: '°C', min: 60, max: 80, dec: 1, color: 'var(--hot)', data: () => H.temp, limits: [{ v: 72, t: 'CCP 72', cls: 'crit' }] },
+  flow: { label: 'Portata', unit: 'L/h', min: 0, max: 5000, dec: 0, color: 'var(--milk-flow)', data: () => H.flow, limits: [] },
+  cell: { label: 'Cella 3', unit: '°C', min: 0, max: 12, dec: 1, color: 'var(--cold)', data: () => H.cell, limits: [{ v: 5.5, t: 'Avviso', cls: 'warn' }, { v: 7, t: 'Allarme', cls: 'crit' }] },
+  power: { label: 'Potenza', unit: 'kW', min: 100, max: 260, dec: 0, color: 'var(--accent)', data: () => H.power, limits: [] }
+};
+let cur = 'temp', hover = null;
+function drawChart() {
+  const svg = $('#chart'); const W = svg.clientWidth, Ht = svg.clientHeight; if (!W) return;
+  const c = SERIES[cur], d = c.data(), n = d.length, m = { l: 46, r: 58, t: 14, b: 26 };
+  const iw = W - m.l - m.r, ih = Ht - m.t - m.b;
+  const X = i => m.l + i / (n - 1) * iw, Y = v => m.t + (1 - (clamp(v, c.min, c.max) - c.min) / (c.max - c.min)) * ih;
+  svg.setAttribute('viewBox', `0 0 ${W} ${Ht}`); svg.style.setProperty('--c', c.color);
+  let s = `<defs><linearGradient id="ga" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(--c);stop-opacity:.34"/><stop offset="1" style="stop-color:var(--c);stop-opacity:0"/></linearGradient></defs>`;
+  for (let k = 0; k <= 4; k++) { const v = c.min + (c.max - c.min) * k / 4, y = Y(v); s += `<line class="grid" x1="${m.l}" x2="${W - m.r}" y1="${y}" y2="${y}"/><text class="axis" x="${m.l - 8}" y="${y + 4}" text-anchor="end">${fmt(v, c.max - c.min < 20 ? 0 : 0)}</text>`; }
+  ['-2:00', '-1:30', '-1:00', '-0:30', 'ora'].forEach((t, k) => { s += `<text class="axis" x="${m.l + k / 4 * iw}" y="${Ht - 6}" text-anchor="${k === 0 ? 'start' : k === 4 ? 'end' : 'middle'}">${t}</text>`; });
+  c.limits.forEach(l => { const y = Y(l.v); s += `<line class="lim ${l.cls}" x1="${m.l}" x2="${W - m.r}" y1="${y}" y2="${y}"/><text class="limt ${l.cls}" x="${W - m.r + 6}" y="${y + 4}">${l.t}</text>`; });
+  const line = d.map((v, i) => (i ? 'L' : 'M') + X(i).toFixed(1) + ' ' + Y(v).toFixed(1)).join('');
+  s += `<path d="${line}L${X(n - 1)} ${m.t + ih}L${m.l} ${m.t + ih}Z" fill="url(#ga)"/><path class="ln" d="${line}"/>`;
+  const ex = X(n - 1), ey = Y(d[n - 1]);
+  s += `<circle class="pulse" cx="${ex}" cy="${ey}" r="5"/><circle cx="${ex}" cy="${ey}" r="4" style="fill:var(--c)"/>`;
+  const tip = $('#tip');
+  if (hover != null) {
+    const i = clamp(hover, 0, n - 1), x = X(i), y = Y(d[i]);
+    s += `<line class="hv" x1="${x}" x2="${x}" y1="${m.t}" y2="${m.t + ih}"/><circle cx="${x}" cy="${y}" r="4.5" style="fill:var(--surface);stroke:var(--c);stroke-width:2"/>`;
+    tip.hidden = false; tip.style.left = clamp(x, 60, W - 60) + 'px'; tip.textContent = `${fmt(d[i], c.dec)} ${c.unit} · ${i === n - 1 ? 'ora' : '-' + (n - 1 - i) + ' s'}`;
+  } else tip.hidden = true;
+  svg.innerHTML = s;
+  svg._geo = { m, iw, n };
+  const last = d[n - 1], mn = Math.min(...d), mx = Math.max(...d);
+  $('#chartfoot').innerHTML = `<span>${c.label}: <b>${fmt(last, c.dec)} ${c.unit}</b></span><span>min <b>${fmt(mn, c.dec)}</b></span><span>max <b>${fmt(mx, c.dec)}</b></span>`;
+}
+const chartEl = () => $('#chart');
+function bindChart() {
+  const svg = chartEl();
+  const mv = e => { const g = svg._geo; if (!g) return; const r = svg.getBoundingClientRect(); hover = Math.round((e.clientX - r.left - g.m.l) / g.iw * (g.n - 1)); if (hover < 0 || hover > g.n - 1) hover = null; drawChart(); };
+  svg.addEventListener('pointermove', mv); svg.addEventListener('pointerdown', mv);
+  svg.addEventListener('pointerleave', () => { hover = null; drawChart(); });
+  $('#serieschips').innerHTML = Object.entries(SERIES).map(([k, v]) => `<button class="chipb" data-s="${k}" aria-pressed="${k === cur}">${v.label}</button>`).join('');
+  $('#serieschips').addEventListener('click', e => { const b = e.target.closest('[data-s]'); if (!b) return; cur = b.dataset.s; $$('#serieschips .chipb').forEach(x => x.setAttribute('aria-pressed', x === b)); drawChart(); });
+}
+
+/* ================= SCADA SVG ================= */
+const PIPES = [
+  { id: 'a', d: 'M150 370H228', k: 'milk', on: () => flowOn() },
+  { id: 'b', d: 'M292 370H340', k: 'milk', on: () => flowOn() },
+  { id: 'c', d: 'M600 330H650', k: 'warm', on: () => flowOn() },
+  { id: 'd', d: 'M650 330H820V290H650V250H853', k: 'warm', on: () => flowOn() },
+  { id: 'e', d: 'M887 250H930', k: 'milk', on: () => flowOn() && !S.fdv },
+  { id: 'r', d: 'M870 233V70H140V110', k: 'bad', on: () => flowOn() && S.fdv },
+  { id: 'f', d: 'M1050 370H1100', k: 'milk', on: () => S.bpm > 1 },
+  { id: 'h', d: 'M400 430V500H540V430', k: 'hot', on: () => flowOn() },
+  { id: 'g', d: 'M960 390V425H1020V390', k: 'cold', on: () => true }
+];
+function tankSVG(id, x, y, w, h, title, sub) {
+  const waves = k => { let p = `M${x - 80} 0`; for (let i = 0; i < (w + 160) / 40 + 1; i++) p += `q10 ${k} 20 0t20 0`; return p + `V${h}H${x - 80}Z`; };
+  return `<g class="eq" data-eq="${id}" tabindex="0" role="button" aria-label="${title}">
+    <clipPath id="cl-${id}"><rect x="${x}" y="${y}" width="${w}" height="${h}" rx="16"/></clipPath>
+    <rect class="tank" x="${x}" y="${y}" width="${w}" height="${h}" rx="16"/>
+    <g clip-path="url(#cl-${id})"><g class="liq" id="liq-${id}" style="transform:translateY(${y + h}px)">
+      <g class="wv2"><path class="milkf2" d="${waves(-8)}"/></g><g class="wv1"><path class="milkf" d="${waves(7)}"/></g></g></g>
+    <rect class="wall" x="${x}" y="${y}" width="${w}" height="${h}" rx="16"/>
+    <path d="M${x + 20} ${y + h}v22M${x + w - 20} ${y + h}v22" stroke="var(--tank-wall)" stroke-width="5" stroke-linecap="round"/>
+    <rect class="halo" x="${x - 10}" y="${y - 10}" width="${w + 20}" height="${h + 40}" rx="22"/>
+    <text class="ttl" x="${x}" y="${y - 24}">${title}</text>
+    <text class="sub" x="${x}" y="${y - 9}">${sub}</text></g>`;
+}
+const chip = (cx, cy, w, label, id, v = '--') => `<g class="chip" transform="translate(${cx} ${cy})"><rect x="${-w / 2}" y="-12" width="${w}" height="24" rx="7"/><text class="l" x="${-w / 2 + 9}" y="4">${label}</text><text class="v" x="${w / 2 - 9}" y="4" text-anchor="end" id="${id}">${v}</text></g>`;
+function buildScada() {
+  let s = `<g>${PIPES.map(p => `<path class="pipe" d="${p.d}"/><path class="flow ${p.k} off" id="pf-${p.id}" d="${p.d}"/>`).join('')}</g>`;
+  s += `<text class="rtl" id="rtl" x="480" y="58" text-anchor="middle">RICIRCOLO PRODOTTO NON CONFORME</text>`;
+  s += tankSVG('t101', 30, 110, 120, 280, 'T-101', 'Ricevimento latte');
+  s += chip(90, 424, 118, 'LT-101', 'c-t101');
+  // pump
+  s += `<g class="eq" data-eq="p101" tabindex="0" role="button" aria-label="Pompa P-101"><circle class="body" cx="260" cy="370" r="31"/>
+    <rect class="body" x="250" y="326" width="20" height="14" rx="3"/><g class="imp" id="imp"><path d="M260 370v-19M260 370l16.5 9.5M260 370l-16.5 9.5"/><circle cx="260" cy="370" r="5.5"/></g>
+    <rect class="halo" x="219" y="322" width="82" height="96" rx="16"/><text class="ttl" x="260" y="312" text-anchor="middle">P-101</text></g>`;
+  s += chip(260, 436, 96, 'Stato', 'c-p101', '--');
+  // heat exchanger
+  let pl = ''; for (let i = 0; i < 13; i++) pl += `<rect class="plate ${i % 2 ? 'p' : 'h'}" style="animation-delay:${(i * .16).toFixed(2)}s" x="${358 + i * 18}" y="298" width="9" height="124" rx="2.5"/>`;
+  s += `<g class="eq" data-eq="px201" tabindex="0" role="button" aria-label="Pastorizzatore PX-201"><rect class="body" x="340" y="290" width="260" height="140" rx="8"/>${pl}
+    <rect x="340" y="290" width="12" height="140" rx="4" fill="var(--tank-wall)"/><rect x="588" y="290" width="12" height="140" rx="4" fill="var(--tank-wall)"/>
+    <rect class="halo" x="330" y="280" width="280" height="160" rx="14"/><text class="ttl" x="470" y="232" text-anchor="middle">PASTORIZZATORE A PIASTRE · PX-201</text></g>`;
+  s += chip(398, 262, 128, 'TT-01 in', 'c-tin') + chip(544, 262, 146, 'TT-02 out', 'c-tout');
+  s += `<text class="sub" x="470" y="522" text-anchor="middle">ACQUA CALDA</text>`;
+  s += chip(470, 541, 118, 'TT-03', 'c-hot');
+  // holding tube
+  s += `<g class="eq" data-eq="ht" tabindex="0" role="button" aria-label="Tubo di mantenimento"><rect class="halo" x="634" y="228" width="204" height="118" rx="14"/><text class="ttl" x="735" y="190" text-anchor="middle">TUBO DI MANTENIMENTO · HT-201</text>
+    <g class="chip ccp" id="ccpchip" transform="translate(735 214)"><rect x="-100" y="-12" width="200" height="24" rx="7"/><text class="l" x="-91" y="4">CCP1</text><text class="v" x="91" y="4" text-anchor="end" id="c-ccp">--</text></g></g>`;
+  // FDV
+  s += `<g class="eq" data-eq="fdv" tabindex="0" role="button" aria-label="Valvola di diversione FDV-201"><path class="valve" id="valve" d="M853 238L870 250L853 262ZM887 238L870 250L887 262Z"/>
+    <path d="M870 262v14" stroke="var(--tank-wall)" stroke-width="3"/><rect class="body" x="858" y="276" width="24" height="16" rx="4"/>
+    <rect class="halo" x="838" y="222" width="64" height="86" rx="12"/><text class="ttl" x="870" y="322" text-anchor="middle">FDV-201</text><text class="sub" id="fdvtxt" x="870" y="337" text-anchor="middle">AVANTI</text></g>`;
+  s += tankSVG('t102', 930, 110, 120, 280, 'T-102', 'Stoccaggio refrigerato');
+  s += chip(1118, 190, 112, 'LT-102', 'c-t102');
+  s += chip(1118, 220, 112, 'TT-04', 'c-tc');
+  // filler
+  s += `<g class="eq" data-eq="fil" tabindex="0" role="button" aria-label="Riempitrice FL-301"><rect class="body" x="1100" y="340" width="115" height="85" rx="10"/>
+    <rect x="1112" y="352" width="91" height="14" rx="4" fill="var(--tank-wall)" opacity=".6"/>
+    <path d="M1130 425v14M1157 425v14M1184 425v14" stroke="var(--tank-wall)" stroke-width="6" stroke-linecap="round"/>
+    <rect class="halo" x="1090" y="330" width="135" height="116" rx="14"/><text class="ttl" x="1157" y="316" text-anchor="middle">RIEMPITRICE FL-301</text></g>`;
+  s += chip(1157, 286, 150, 'Cadenza', 'c-bpm');
+  s += `<rect class="belt" x="850" y="500" width="390" height="14" rx="7"/><line class="beltl" id="beltl" x1="858" x2="1232" y1="507" y2="507"/><g id="bottles"></g>`;
+  $('#scada').innerHTML = s;
+}
+const bottles = []; let lastT = 0, spawnX = 0;
+function bottleEl() {
+  const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+  g.innerHTML = '<rect class="btf" x="-11" y="-2" width="22" height="0" rx="3"/><rect class="btb" x="-13" y="-40" width="26" height="40" rx="7"/><rect class="btb" x="-5" y="-52" width="10" height="12" rx="2"/><rect class="btc" x="-6.5" y="-57" width="13" height="6" rx="2" opacity="0"/>';
+  $('#bottles').appendChild(g); return g;
+}
+function animateBottles(t) {
+  const dt = Math.min(.05, (t - lastT) / 1000 || 0); lastT = t;
+  const v = S.bpm / 60 * 58 * .62, dx = v * dt;
+  if (dx > 0) {
+    bottles.forEach(b => b.x += dx);
+    spawnX += dx; if (spawnX >= 58) { spawnX = 0; bottles.push({ x: 858, el: bottleEl() }); }
+  }
+  for (let i = bottles.length - 1; i >= 0; i--) {
+    const b = bottles[i]; if (b.x > 1236) { b.el.remove(); bottles.splice(i, 1); continue; }
+    const f = clamp((b.x - 1108) / 94, 0, 1);
+    b.el.setAttribute('transform', `translate(${b.x.toFixed(1)} 500)`);
+    const fill = b.el.children[0], cap = b.el.children[3];
+    fill.setAttribute('height', (37 * f).toFixed(1)); fill.setAttribute('y', (-2 - 37 * f).toFixed(1));
+    cap.setAttribute('opacity', b.x > 1206 ? 1 : 0);
+  }
+  $('#beltl').style.setProperty('--bs', S.bpm > 1 ? '1.4s' : '9999s');
+  requestAnimationFrame(animateBottles);
+}
+function initBottles() { for (let x = 858; x < 1236; x += 58) bottles.push({ x, el: bottleEl() }); }
+
+/* ================= EQUIPMENT / DRAWER ================= */
+const stOf = {
+  t101: () => S.trip ? 'crit' : S.t101 < 20 ? 'warn' : 'ok', p101: () => S.trip ? 'crit' : !S.manual ? 'warn' : 'ok',
+  px201: () => S.f.temp && S.temp < 72 ? 'crit' : S.temp < 73.2 && flowOn() ? 'warn' : 'ok',
+  ht: () => flowOn() && S.temp < 72 ? 'crit' : 'ok', fdv: () => S.fdv ? 'crit' : 'ok',
+  t102: () => S.t102 < 15 ? 'warn' : 'ok', fil: () => S.bpm < 1 ? 'warn' : 'ok'
+};
+const EQ = {
+  t101: { name: 'Serbatoio ricevimento latte', tag: 'T-101', ser: 't101', fmt: 0, unit: '%', m: () => [['Livello', fmt(S.t101), '%'], ['Volume', fmt(S.t101 * 100), 'L'], ['Temperatura', '4,2', '°C']] },
+  p101: { name: 'Pompa di alimentazione', tag: 'P-101', ser: 'flow', fmt: 0, unit: 'L/h', m: () => [['Stato', flowOn() ? 'RUN' : 'STOP', ''], ['Portata', fmt(S.flow), 'L/h'], ['Corrente', fmt(flowOn() ? 11.4 + S.flow / 1200 : 0, 1), 'A']], cmd: 'pump' },
+  px201: { name: 'Pastorizzatore a piastre', tag: 'PX-201', ser: 'temp', fmt: 1, unit: '°C', m: () => [['Ingresso', fmt(S.tin, 1), '°C'], ['Uscita', fmt(S.temp, 1), '°C'], ['Acqua calda', fmt(S.hot, 1), '°C']] },
+  ht: { name: 'Tubo di mantenimento · CCP1', tag: 'HT-201', ser: 'temp', fmt: 1, unit: '°C', m: () => [['Temperatura', fmt(S.temp, 1), '°C'], ['Mantenimento', fmt(hold(), 1), 's'], ['Minimo', '72,0 / 15', '°C / s']] },
+  fdv: { name: 'Valvola di diversione', tag: 'FDV-201', ser: 'temp', fmt: 1, unit: '°C', m: () => [['Posizione', S.fdv ? 'RICIRCOLO' : 'AVANTI', ''], ['Comando', 'Automatico', ''], ['Manovre oggi', '2', '']] },
+  t102: { name: 'Tank di stoccaggio refrigerato', tag: 'T-102', ser: 't102', fmt: 0, unit: '%', m: () => [['Livello', fmt(S.t102), '%'], ['Volume', fmt(S.t102 * 80), 'L'], ['Temperatura', fmt(S.tout, 1), '°C']] },
+  fil: { name: 'Riempitrice', tag: 'FL-301', ser: 'bpm', fmt: 0, unit: 'bt/min', m: () => [['Cadenza', fmt(S.bpm), 'bt/min'], ['Prodotte', fmt(S.done), 'bt'], ['Scarti', '0,12', '%']] }
+};
+const hold = () => S.flow > 100 ? 64600 / S.flow : 0;
+let openId = null;
+function openEq(id) {
+  openId = id; const e = EQ[id];
+  $('#drawer').innerHTML = `<div class="dr-h"><div><span class="eyebrow mono">${e.tag}</span><h3>${e.name}</h3><div style="margin-top:8px"><span class="pill" id="dr-st">OK</span></div></div><button class="xbtn" id="dr-x" aria-label="Chiudi">×</button></div>
+  <div class="dr-b"><div class="mets" id="dr-m"></div><div><div class="eyebrow" style="margin-bottom:6px">Ultimi 2 minuti</div><svg class="dr-sp" id="dr-sp" preserveAspectRatio="none"></svg></div>
+  ${e.cmd ? `<button class="hold" id="hold"><svg width="34" height="34" viewBox="0 0 34 34"><circle cx="17" cy="17" r="13" fill="none" stroke="var(--line2)" stroke-width="3"/><path d="M17 8v9" stroke="var(--crit)" stroke-width="3" stroke-linecap="round"/><path d="M11 12a8.5 8.5 0 1012 0" fill="none" stroke="var(--crit)" stroke-width="3" stroke-linecap="round"/></svg><span><b id="hold-t"></b><small>Tieni premuto 1 secondo per confermare</small></span></button>` : '<p style="color:var(--muted);font-size:12.5px">Componente di sola lettura. I comandi sono disponibili sulle pompe.</p>'}</div>`;
+  $('#drawer').classList.add('on'); $('#scrim').classList.add('on');
+  $('#dr-x').onclick = closeEq; $('#dr-x').focus();
+  if (e.cmd) bindHold($('#hold'));
+  updateDrawer();
+}
+function closeEq() { openId = null; $('#drawer').classList.remove('on'); $('#scrim').classList.remove('on'); }
+function updateDrawer() {
+  if (!openId) return; const e = EQ[openId], st = stOf[openId]();
+  $('#dr-m').innerHTML = e.m().map(([l, v, u]) => `<div class="met"><small>${l}</small><b class="num">${v}</b><span>${u}</span></div>`).join('');
+  const p = $('#dr-st'); p.className = 'pill ' + st; p.textContent = { ok: 'Regolare', warn: 'Avviso', crit: 'Allarme' }[st];
+  spark($('#dr-sp'), H[e.ser], 'var(--accent)', N);
+  const ht = $('#hold-t'); if (ht) { const run = flowOn(); ht.textContent = run ? 'Arresta pompa P-101' : (S.trip ? 'Riarmo bloccato dalla protezione' : 'Avvia pompa P-101'); $('#hold').disabled = S.trip; }
+}
+function bindHold(btn) {
+  let raf = 0, t0 = 0, active = false;
+  const end = () => { active = false; cancelAnimationFrame(raf); btn.style.setProperty('--p', 0); };
+  const run = now => { if (!active) return; const p = clamp((now - t0) / 1000, 0, 1); btn.style.setProperty('--p', p); if (p >= 1) { end(); S.manual = !S.manual; logEv(S.manual ? 'ok' : 'warn', S.manual ? 'P-101 avviata da operatore' : 'P-101 arrestata da operatore', 'P-101'); toast(S.manual ? 'ok' : 'warn', S.manual ? 'Comando eseguito: P-101 avviata' : 'Comando eseguito: P-101 arrestata'); updateDrawer(); return; } raf = requestAnimationFrame(run); };
+  const start = () => { if (btn.disabled) return; active = true; t0 = performance.now(); raf = requestAnimationFrame(run); };
+  btn.addEventListener('pointerdown', start); ['pointerup', 'pointerleave', 'pointercancel'].forEach(ev => btn.addEventListener(ev, end));
+  btn.addEventListener('keydown', e => { if ((e.key === ' ' || e.key === 'Enter') && !e.repeat) { e.preventDefault(); start(); } });
+  btn.addEventListener('keyup', end);
+}
+
+/* ================= RENDER ================= */
+const setT = (id, v) => { const e = document.getElementById(id); if (e && e.textContent !== v) e.textContent = v; };
+function render() {
+  const st = {}; Object.keys(stOf).forEach(k => st[k] = stOf[k]());
+  // overview
+  tween($('#v-oee'), S.oee, 1); $('#oeering').style.strokeDashoffset = 163.4 * (1 - clamp(S.oee, 0, 100) / 100);
+  $('#oeering').style.stroke = S.oee < 70 ? 'var(--crit)' : S.oee < 85 ? 'var(--warn)' : 'var(--ok)';
+  tween($('#v-flow'), S.flow, 0); tween($('#v-temp'), S.temp, 1); tween($('#v-bpm'), S.bpm, 0); tween($('#v-pow'), S.power, 0);
+  $('#k-temp').classList.toggle('crit', st.ht === 'crit');
+  setT('s-temp', st.ht === 'crit' ? 'Sotto il limite 72,0 °C · ricircolo attivo' : 'Limite minimo 72,0 °C · mantenimento ' + fmt(hold(), 1) + ' s');
+  setT('s-pow', fmt(S.flow > 100 ? S.power / S.flow : 0, 3) + ' kWh per litro');
+  spark($('#sp-flow'), H.flow, 'var(--milk-flow)'); spark($('#sp-temp'), H.temp, st.ht === 'crit' ? 'var(--crit)' : 'var(--hot)');
+  spark($('#sp-bpm'), H.bpm, 'var(--ok)'); spark($('#sp-pow'), H.power, 'var(--accent)');
+  $('#batchBar').style.width = (S.done / S.goal * 100).toFixed(2) + '%';
+  setT('batchDone', fmt(Math.floor(S.done)));
+  const left = S.bpm > 1 ? (S.goal - S.done) / S.bpm : null;
+  setT('batchEta', left == null ? 'Linea ferma' : 'Fine stimata ' + new Date(Date.now() + left * 60000).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }));
+  const anyCrit = A.some(a => a.active && a.sev === 'crit'), anyWarn = A.some(a => a.active && a.sev === 'warn');
+  const ls = $('#lineState'); ls.className = 'pill ' + (S.bpm < 1 ? 'warn' : anyCrit ? 'crit' : 'ok'); ls.textContent = S.bpm < 1 ? 'Linea ferma' : anyCrit ? 'Produzione con deviazione' : 'In produzione';
+  const mc = Math.max(...S.cells);
+  const steps = [
+    ['Ricevimento latte', 'T-101 · livello ' + fmt(S.t101) + ' %', st.t101, fmt(S.flow) + ' L/h'],
+    ['Pastorizzazione', 'CCP1 · mantenimento ' + fmt(hold(), 1) + ' s', st.ht, fmt(S.temp, 1) + ' °C'],
+    ['Stoccaggio refrigerato', 'T-102 · livello ' + fmt(S.t102) + ' %', st.t102, fmt(S.tout, 1) + ' °C'],
+    ['Riempimento', 'FL-301 · ' + fmt(S.done) + ' bt', st.fil, fmt(S.bpm) + ' bt/min'],
+    ['Celle frigorifere', '3 celle monitorate', mc > 7 ? 'crit' : mc > 5.5 ? 'warn' : 'ok', 'max ' + fmt(mc, 1) + ' °C']];
+  const sh = steps.map(s => s.join('|')).join('~');
+  if ($('#steps')._h !== sh) { $('#steps')._h = sh; $('#steps').innerHTML = steps.map(s => `<li class="step ${s[2]}"><span class="sd"></span><div><b>${s[0]}</b><small>${s[1]}</small></div><span class="sv num">${s[3]}</span></li>`).join(''); }
+  // alarm chip + badges
+  const act = A.filter(a => a.active), un = act.filter(a => !a.ack);
+  const ch = $('#alchip'); ch.className = 'ibtn alchip' + (un.some(a => a.sev === 'crit') ? ' crit' : act.some(a => a.sev !== 'ok') && act.length ? ' warn' : '');
+  setT('alnum', act.length ? act.length + (act.length === 1 ? ' allarme attivo' : ' allarmi attivi') : 'Nessun allarme');
+  $$('.nav .badge').forEach(b => { b.hidden = !un.length; b.textContent = un.length; });
+  if ($('#evs')._rev !== rev) { $('#evs')._rev = rev; renderEvents(); renderAlarms(); }
+  // scada
+  const ison = flowOn();
+  PIPES.forEach(p => { const e = document.getElementById('pf-' + p.id); if (!e) return; const on = p.on(); e.classList.toggle('off', !on); e.style.setProperty('--spd', (p.k === 'hot' || p.k === 'cold' ? .9 : clamp(1.6 - S.flow / 3600, .5, 1.6)) + 's'); });
+  const liq = (id, y, h, lv) => { const e = document.getElementById('liq-' + id); if (e) e.style.transform = `translateY(${y + h * (1 - clamp(lv, 0, 100) / 100)}px)`; };
+  liq('t101', 110, 280, S.t101); liq('t102', 110, 280, S.t102);
+  setT('c-t101', fmt(S.t101) + ' %'); setT('c-t102', fmt(S.t102) + ' %'); setT('c-p101', ison ? 'RUN' : 'STOP');
+  setT('c-tin', fmt(S.tin, 1) + ' °C'); setT('c-tout', fmt(S.temp, 1) + ' °C'); setT('c-hot', fmt(S.hot, 1) + ' °C');
+  setT('c-ccp', fmt(S.temp, 1) + ' °C · ' + fmt(hold(), 1) + ' s'); setT('c-tc', fmt(S.tout, 1) + ' °C'); setT('c-bpm', fmt(S.bpm) + ' bt/min');
+  $('#imp').classList.toggle('stop', !ison); $('#imp').style.animationDuration = clamp(1.4 - S.flow / 5000, .35, 1.4) + 's';
+  $('#valve').classList.toggle('div', S.fdv); setT('fdvtxt', S.fdv ? 'RICIRCOLO' : 'AVANTI');
+  $('#rtl').classList.toggle('on', S.fdv && ison); $('#ccpchip').classList.toggle('crit', st.ht === 'crit');
+  Object.keys(st).forEach(k => { const g = $(`[data-eq="${k}"]`); if (g) { g.classList.toggle('warn', st[k] === 'warn'); g.classList.toggle('crit', st[k] === 'crit'); } });
+  updateDrawer();
+  if (page === 'panoramica') drawChart();
+  if (page === 'haccp') updateHaccp();
+}
+
+function renderEvents() {
+  $('#evs').innerHTML = LOG.slice(0, 7).map(e => `<li class="ev ${e.sev}"><time>${tfmt(e.t)}</time><i></i><span>${e.text}</span><span class="tg">${e.tag}</span></li>`).join('');
+}
+function renderAlarms() {
+  const act = A.filter(a => a.active), cnt = s => act.filter(a => a.sev === s).length;
+  $('#acount').innerHTML = [['crit', 'Critici', 'var(--crit)'], ['warn', 'Avvisi', 'var(--warn)'], ['un', 'Da riconoscere', 'var(--accent)']].map(([k, l, c]) =>
+    `<div class="card"><b class="num" style="color:${c}">${k === 'un' ? act.filter(a => !a.ack).length : cnt(k)}</b><div><div style="font-weight:600">${l}</div><small>${k === 'un' ? 'in attesa di presa visione' : 'attivi adesso'}</small></div></div>`).join('');
+  $('#afilter').innerHTML = [['attivi', 'Attivi'], ['storico', 'Storico'], ['tutti', 'Tutti']].map(([k, l]) => `<button class="chipb" data-f="${k}" aria-pressed="${k === filter}">${l}</button>`).join('');
+  const list = A.filter(a => filter === 'tutti' || (filter === 'attivi' ? a.active : !a.active));
+  $('#alist').innerHTML = list.length ? list.map(a => `<div class="arow ${a.sev} ${a.active && !a.ack ? 'un' : ''} ${a.active ? '' : 'cleared'}"><span class="st"></span><time>${tfmt(a.t0)}</time>
+    <div class="tx"><b>${a.text}</b><small>${a.tag}${a.active ? '' : ' · rientrato ' + tfmt(a.t1)}</small></div>
+    <div class="acts">${a.active ? (a.ack ? '<span class="pill ok">Riconosciuto</span>' : `<button class="btn" data-ack="${a.id}">Riconosci</button>`) : '<span class="pill">Chiuso</span>'}</div></div>`).join('')
+    : `<div class="empty">${filter === 'attivi' ? 'Nessun allarme attivo. Usa “Simula guasto” in alto per vedere come reagisce il sistema.' : 'Nessun evento da mostrare.'}</div>`;
+  $('#ackall').disabled = !act.some(a => !a.ack);
+}
+
+/* HACCP page */
+const LOTS = [['L2610-0457', 'Latte intero 1 L', '18.420 / 24.000', '74,2 °C', 'In corso'], ['L2610-0456', 'Latte parz. scremato 1 L', '24.000', '74,1 °C', 'Rilasciato'], ['L2610-0455', 'Latte intero 0,5 L', '31.200', '74,3 °C', 'Rilasciato'], ['L2609-0454', 'Yogurt bianco 125 g', '48.600', '—', 'Rilasciato']];
+function buildHaccp() {
+  $('#ccps').innerHTML = `
+  <div class="card ccp" id="ccp1"><div class="row"><div><span class="eyebrow">CCP1 · Pastorizzazione</span><div class="big num"><b id="h-temp">--</b><span>°C</span></div></div><span class="pill ok" id="h-temp-p">Conforme</span></div><div class="lim">Limite critico ≥ 72,0 °C per ≥ 15 s</div><svg class="sp" id="h-sp1" preserveAspectRatio="none" style="width:100%;height:38px"></svg></div>
+  <div class="card ccp" id="ccp2"><div class="row"><div><span class="eyebrow">CCP2 · Tempo di mantenimento</span><div class="big num"><b id="h-hold">--</b><span>s</span></div></div><span class="pill ok" id="h-hold-p">Conforme</span></div><div class="lim">Limite critico ≥ 15,0 s alla portata di processo</div><svg class="sp" id="h-sp2" preserveAspectRatio="none" style="width:100%;height:38px"></svg></div>
+  <div class="card ccp"><div class="row"><div><span class="eyebrow">CCP3 · Rilevatore di metalli</span><div class="big num"><b>0</b><span>scarti</span></div></div><span class="pill ok">Conforme</span></div><div class="lim">Ultima verifica sensibilità 06:05 · Fe 1,5 mm</div><div class="lim">Bottiglie controllate: <b class="num" id="h-ctl" style="color:var(--fg)">0</b></div></div>`;
+  $('#cells').innerHTML = [0, 1, 2].map(i => `<div class="card cell"><div class="thermo" id="th${i}"><i></i><b style="bottom:${4.5 / 12 * 100}%"></b></div>
+    <div class="info"><div><span class="eyebrow">Cella ${i + 1} · ${['Latticini', 'Yogurt', 'Spedizione'][i]}</span><div class="big num"><b id="ct${i}">--</b><span> °C</span></div></div>
+    <svg class="sp" id="csp${i}" preserveAspectRatio="none"></svg><div class="door"><span class="pill" id="cd${i}">Porta chiusa</span><span class="pill" id="cs${i}">Regolare</span></div></div></div>`).join('');
+  $('#cip').innerHTML = [['Prerisciacquo acqua', '05:21'], ['Soda caustica 75 °C · 1,5 %', '05:34'], ['Risciacquo intermedio', '05:52'], ['Acido nitrico 65 °C · 1 %', '05:58'], ['Sanificazione finale', '06:12']].map(([a, t]) => `<div class="cipstep"><span class="ck">✓</span><span style="font-family:var(--f-body);color:var(--fg)">${a}</span><span>${t}</span></div>`).join('');
+  $('#lots').innerHTML = LOTS.map(r => `<tr><td class="mono">${r[0]}</td><td>${r[1]}</td><td class="num">${r[2]}</td><td class="mono">${r[3]}</td><td><span class="pill ${r[4] === 'In corso' ? 'warn' : 'ok'}">${r[4]}</span></td></tr>`).join('');
+}
+const cipEnd = Date.now() + (3 * 3600 + 12 * 60) * 1000;
+function updateHaccp() {
+  const bad = S.temp < 72 && flowOn();
+  setT('h-temp', fmt(S.temp, 1)); setT('h-hold', fmt(hold(), 1)); setT('h-ctl', fmt(Math.floor(S.done)));
+  [['h-temp-p', bad], ['h-hold-p', hold() < 15 && flowOn()]].forEach(([id, b]) => { const e = $('#' + id); e.className = 'pill ' + (b ? 'crit' : 'ok'); e.textContent = b ? 'Deviazione' : 'Conforme'; });
+  $('#ccp1').classList.toggle('crit', bad);
+  spark($('#h-sp1'), H.temp, bad ? 'var(--crit)' : 'var(--hot)', 90); spark($('#h-sp2'), H.flow.map(f => f > 100 ? 64600 / f : 0), 'var(--accent)', 90);
+  S.cells.forEach((c, i) => {
+    const s = c > 7 ? 'crit' : c > 5.5 ? 'warn' : 'ok';
+    setT('ct' + i, fmt(c, 1)); const th = $('#th' + i); th.className = 'thermo ' + s; th.firstElementChild.style.height = clamp(c / 12 * 100, 2, 100) + '%';
+    const open = i === 2 && S.f.cold; const d = $('#cd' + i); d.className = 'pill ' + (open ? 'crit' : 'ok'); d.textContent = open ? 'Porta aperta' : 'Porta chiusa';
+    const e = $('#cs' + i); e.className = 'pill ' + s; e.textContent = { ok: 'Regolare', warn: 'Sopra soglia', crit: 'Allarme' }[s];
+    spark($('#csp' + i), [H.c0, H.c1, H.cell][i], s === 'ok' ? 'var(--cold)' : s === 'warn' ? 'var(--warn)' : 'var(--crit)', 90);
+  });
+  const r = Math.max(0, cipEnd - Date.now()), p = n => String(n).padStart(2, '0');
+  setT('cipcd', `${p(Math.floor(r / 3600000))}:${p(Math.floor(r / 60000) % 60)}:${p(Math.floor(r / 1000) % 60)}`);
+}
+
+/* ================= NAV, THEME, SIM, TOAST ================= */
+const ICON = {
+  panoramica: '<rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/>',
+  sinottico: '<circle cx="5" cy="6" r="2.5"/><circle cx="19" cy="6" r="2.5"/><circle cx="12" cy="18" r="2.5"/><path d="M7.5 6h9M6.5 8l4 8M17.5 8l-4 8"/>',
+  haccp: '<path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M8.5 12l2.5 2.5L16 9.5"/>',
+  allarmi: '<path d="M6 16V11a6 6 0 1112 0v5l1.5 2h-15z"/><path d="M10 21h4"/>',
+  sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M5 19l1.5-1.5M17.5 6.5L19 5"/>',
+  moon: '<path d="M20 14.5A8.5 8.5 0 019.5 4 8.5 8.5 0 1020 14.5z"/>'
+};
+const PAGES = [['panoramica', 'Panoramica'], ['sinottico', 'Sinottico'], ['haccp', 'HACCP'], ['allarmi', 'Allarmi']];
+let page = 'panoramica';
+function buildNav() {
+  const btn = ([k, l]) => `<button class="nav" data-go="${k}" aria-label="${l}"><svg viewBox="0 0 24 24">${ICON[k]}</svg>${l}${k === 'allarmi' ? '<span class="badge" hidden>0</span>' : ''}</button>`;
+  $('#rail').innerHTML = `<div class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3c3 4 6 7 6 11a6 6 0 01-12 0c0-4 3-7 6-11z"/></svg></div>` + PAGES.map(btn).join('');
+  $('#tabbar').innerHTML = PAGES.map(btn).join('');
+}
+function go(p, push = true) {
+  if (!PAGES.some(x => x[0] === p)) p = 'panoramica'; page = p;
+  $$('.page').forEach(s => s.hidden = s.id !== 'p-' + p);
+  $$('.nav').forEach(n => n.setAttribute('aria-current', n.dataset.go === p ? 'page' : 'false'));
+  if (push) { try { history.replaceState(null, '', '#' + p); } catch (e) {} }
+  closeEq(); window.scrollTo(0, 0);
+  if (p === 'haccp') updateHaccp(); if (p === 'panoramica') drawChart();
+}
+function applyTheme(t) {
+  if (t) document.documentElement.dataset.theme = t;
+  const dark = (document.documentElement.dataset.theme || (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark')) === 'dark';
+  $('#themeico').innerHTML = dark ? ICON.sun : ICON.moon;
+}
+function buildSim() {
+  const items = [['temp', 'Temperatura pastorizzazione bassa', 'CCP1 sotto 72 °C, la valvola FDV devia il prodotto'], ['cold', 'Cella 3 con porta aperta', 'La temperatura sale, scatta la catena del freddo'], ['level', 'Livello basso nel silo T-101', 'La pompa P-101 si arresta per marcia a secco']];
+  $('#simmenu').innerHTML = '<h4>Scenari demo</h4>' + items.map(([k, t, d]) => `<button data-sim="${k}" class="${S.f[k] ? 'on' : ''}"><span><b>${t}</b><small>${d}</small></span><span class="tick">${S.f[k] ? '!' : ''}</span></button>`).join('') + '<hr><button data-sim="reset"><span><b>Ripristina tutto</b><small>Riporta l’impianto in marcia normale</small></span></button>';
+}
+function sim(k) {
+  if (k === 'reset') { Object.keys(S.f).forEach(x => S.f[x] = false); S.manual = true; if (S.t101 < 30) S.t101 = 30; toast('ok', 'Scenari ripristinati, l’impianto torna alla marcia normale'); }
+  else { S.f[k] = !S.f[k]; if (!S.f[k] && k === 'level' && S.t101 < 30) S.t101 = 30; }
+  buildSim();
+}
+function toast(sev, text) {
+  const el = document.createElement('div'); el.className = 'toast ' + sev; el.setAttribute('role', 'status');
+  el.innerHTML = `<span class="st"></span><div><b>${{ crit: 'Allarme critico', warn: 'Avviso', ok: 'Informazione' }[sev]}</b><span>${text}</span></div>`;
+  $('#toasts').prepend(el); while ($('#toasts').children.length > 3) $('#toasts').lastChild.remove();
+  setTimeout(() => { el.classList.add('out'); setTimeout(() => el.remove(), 320); }, 6500);
+}
+
+/* ================= INIT ================= */
+buildNav(); buildScada(); initBottles(); buildHaccp(); bindChart(); buildSim();
+document.addEventListener('click', e => {
+  const g = e.target.closest('[data-go]'); if (g) { go(g.dataset.go); return; }
+  const q = e.target.closest('[data-ack]'); if (q) { const a = A.find(x => x.id === q.dataset.ack && x.active); if (a) { a.ack = true; rev++; render(); } return; }
+  const f = e.target.closest('[data-f]'); if (f) { filter = f.dataset.f; rev++; render(); return; }
+  const sm = e.target.closest('[data-sim]'); if (sm) { sim(sm.dataset.sim); return; }
+  if (!e.target.closest('.simwrap')) { $('#simmenu').hidden = true; $('#simbtn').setAttribute('aria-expanded', 'false'); }
+  const eq = e.target.closest('[data-eq]'); if (eq) openEq(eq.dataset.eq);
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') { closeEq(); $('#simmenu').hidden = true; }
+  if ((e.key === 'Enter' || e.key === ' ') && e.target.matches && e.target.matches('.eq')) { e.preventDefault(); openEq(e.target.dataset.eq); }
+});
+$('#scrim').onclick = closeEq;
+$('#simbtn').onclick = e => { e.stopPropagation(); const m = $('#simmenu'); m.hidden = !m.hidden; $('#simbtn').setAttribute('aria-expanded', String(!m.hidden)); };
+$('#alchip').onclick = () => go('allarmi');
+$('#ackall').onclick = () => { A.forEach(a => { if (a.active) a.ack = true; }); rev++; render(); };
+$('#themebtn').onclick = () => { const cur = document.documentElement.dataset.theme || (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'); const n = cur === 'dark' ? 'light' : 'dark'; store.set('scada-theme', n); applyTheme(n); drawChart(); };
+const savedTheme = store.get('scada-theme'); if (savedTheme) document.documentElement.dataset.theme = savedTheme; applyTheme();
+new ResizeObserver(() => drawChart()).observe($('#chart'));
+setInterval(() => { $('#clock').textContent = new Date().toLocaleTimeString('it-IT'); $('#lat').textContent = Math.round(rnd(18, 29)) + ' ms'; }, 1000);
+$('#clock').textContent = new Date().toLocaleTimeString('it-IT');
+render(); renderEvents(); renderAlarms();
+go((location.hash || '').slice(1) || 'panoramica', false);
+setInterval(tick, 1000);
+if (!RM) requestAnimationFrame(animateBottles);
+window.__scada = { S, sim, go, tick };
+})();
+</script>
+</body>
+</html>
