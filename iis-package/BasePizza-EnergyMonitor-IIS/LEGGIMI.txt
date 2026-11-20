@@ -1,0 +1,84 @@
+﻿BASE PIZZA SRL - ENERGY MONITOR
+Pacchetto di installazione per IIS (Gravina in Puglia)
+=====================================================
+
+Cosa e'
+-------
+Applicazione web di monitoraggio energetico, in versione dimostrativa con dati simulati.
+E' un sito statico: non richiede database, .NET, PHP o accesso a internet.
+Font e immagini sono inclusi nel pacchetto.
+
+Requisiti
+---------
+- Windows Server 2016 o successivo (anche Windows 10/11 per le prove)
+- PowerShell 5.1, eseguito come Amministratore
+- IIS: se manca, lo script lo installa
+
+Installazione
+-------------
+1. Copiare sul server la cartella "BasePizza-EnergyMonitor-IIS" (tutta, con la sottocartella "site").
+2. Aprire PowerShell come Amministratore nella cartella del pacchetto.
+3. Se la policy di Windows blocca gli script, eseguire solo per questa finestra:
+       Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+4. Eseguire:
+       .\Install-BasePizzaEnergyMonitor.ps1
+   Il sito risponde su  http://NOME-SERVER:8080/
+
+Opzioni
+-------
+  -Port 80                       porta HTTP (predefinita 8080)
+  -HostName energia.basepizza.local   nome DNS del sito
+  -OpenFirewall                  apre la porta nel firewall di Windows
+  -HttpsPort 443 -CertThumbprint XXXX   attiva HTTPS con un certificato gia' presente
+                                 nel contenitore Computer > Personale del server
+  -InstallPath D:\Siti\EnergyMonitor    cartella di installazione
+  -SiteName NomeSito             nome del sito in IIS
+
+Esempi:
+  .\Install-BasePizzaEnergyMonitor.ps1 -Port 80 -HostName energia.basepizza.local -OpenFirewall
+  .\Install-BasePizzaEnergyMonitor.ps1 -Port 80 -HttpsPort 443 -CertThumbprint 0123ABCD... -OpenFirewall
+
+Se HostName e' indicato, il nome va registrato nel DNS interno (o nel file hosts dei PC).
+Lo script non modifica il DNS.
+
+Inserire il logo ufficiale del cliente
+--------------------------------------
+Il logo incluso e' un SEGNAPOSTO.
+1. Copiare il logo vero nella cartella del sito, sotto "assets":
+       C:\inetpub\BasePizza-EnergyMonitor\assets\logo.svg
+   (se il logo e' un PNG, copiarlo come assets\logo.png e in assets\config.js cambiare
+    la riga  logo: 'assets/logo.svg'  in  logo: 'assets/logo.png')
+2. Se il logo contiene gia' il nome dell'azienda, in assets\config.js impostare  showName: false
+3. Ricaricare la pagina con Ctrl+F5. Non serve riavviare IIS.
+Per cambiare nome, sede o titolo, modificare sempre assets\config.js.
+Rilanciando lo script di installazione, logo e config.js gia' personalizzati vengono conservati.
+
+Aggiornare
+----------
+Sostituire il contenuto della cartella "site" del pacchetto e rilanciare lo script di installazione.
+
+Disinstallare
+-------------
+  .\Uninstall-BasePizzaEnergyMonitor.ps1              rimuove sito, pool e regole firewall
+  .\Uninstall-BasePizzaEnergyMonitor.ps1 -RemoveFiles elimina anche la cartella del sito
+IIS e gli altri siti non vengono toccati.
+
+Problemi frequenti
+------------------
+- "La porta 8080 e' gia' usata": rilanciare con un'altra porta, per esempio -Port 8081.
+- Il browser di un altro PC non raggiunge il sito: usare -OpenFirewall, oppure aprire la porta
+  nel firewall aziendale.
+- Errore 403: verificare i permessi sulla cartella del sito (lo script li imposta per IIS_IUSRS e IUSR).
+- Errore 500.19 o 500.0 sul web.config: mancano componenti IIS. Rilanciare lo script come Amministratore.
+- Le scritte non cambiano dopo una modifica: premere Ctrl+F5 per svuotare la cache del browser.
+
+Sicurezza
+---------
+- Il sito invia intestazioni di sicurezza (CSP, X-Frame-Options, nosniff) dal file web.config.
+- Non chiede credenziali: per l'uso fuori dalla rete interna aggiungere autenticazione
+  (per esempio tramite reverse proxy) e HTTPS.
+
+Dati reali
+----------
+Questa versione usa dati simulati. Per leggere i power meter Schneider via Modbus TCP serve
+un servizio di acquisizione dedicato, che non e' incluso in questo pacchetto.

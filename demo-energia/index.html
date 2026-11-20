@@ -4,9 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="claude:viewport-fit-sides" content="cover">
-<title>Fornaria Energy Monitor</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<title>Base Pizza SRL · Energy Monitor</title>
+<link rel="icon" href="assets/logo.svg">
+<link rel="stylesheet" href="assets/fonts/fonts.css">
+<script src="assets/config.js"></script>
 <style>
 /* Layout: icon rail + header + pages. Hero = animated single-line diagram of the electrical rooms, fed by Modbus TCP power meters.
    Palette: warm charcoal (oven room), flour-cream text, ember orange = load/accent, electric blue = energy flow, green = PV, semantic ok/warn/crit. */
@@ -56,8 +57,8 @@ h1,h2,h3,p{margin:0}
 /* shell */
 .app{display:grid;grid-template-columns:76px minmax(0,1fr);min-height:100%}
 .rail{position:sticky;top:env(safe-area-inset-top,0px);height:100vh;display:flex;flex-direction:column;align-items:center;gap:6px;padding:16px 0;background:var(--rail);border-right:1px solid var(--line)}
-.mark{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;margin-bottom:14px;background:linear-gradient(160deg,#FFD9A8,var(--accent));color:#2A1203}
-.mark svg{width:22px;height:22px}
+.mark{width:44px;height:44px;border-radius:12px;display:grid;place-items:center;margin-bottom:12px;overflow:hidden}
+.mark img{width:100%;height:100%;object-fit:contain}
 .nav{width:58px;padding:9px 0 7px;border:0;border-radius:12px;background:none;color:var(--muted);display:flex;flex-direction:column;align-items:center;gap:3px;font-size:10.5px;font-weight:500;position:relative;transition:background .2s,color .2s}
 .nav svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
 .nav:hover{background:var(--surface2);color:var(--fg)}
@@ -69,6 +70,8 @@ h1,h2,h3,p{margin:0}
 .wrap{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
 .top{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
 .top-in{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:64px;flex-wrap:wrap;padding-block:8px}
+.plant{display:flex;align-items:center;gap:12px;min-width:0}
+.plogo{height:40px;width:auto;max-width:160px;object-fit:contain;border-radius:10px;flex:none}
 .plant b{display:block;font:700 18px/1.15 var(--f-display);letter-spacing:-.01em}
 .plant span{color:var(--muted);font-size:12px}
 .top-r{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
@@ -346,7 +349,7 @@ canvas.scope{width:100%;height:240px;display:block;border-radius:10px;background
   <div class="main">
     <header class="top">
       <div class="top-in wrap">
-        <div class="plant"><b>Fornaria Demo · Energy Monitor</b><span>Basi pizza e prodotti da forno · Stabilimento 01 · 10 power meter</span></div>
+        <div class="plant"><img class="plogo" id="plogo" alt="" width="40" height="40"><div class="ptxt"><b id="pname">Energy Monitor</b><span id="psub"></span></div></div>
         <div class="top-r">
           <span class="simclk" title="Orario simulato della demo"><i class="dot"></i><em>Demo</em><b id="clk">--:--</b><span class="lbl2" id="clkd">--</span><span id="spd" class="mono"></span></span>
           <button class="ibtn alchip" id="alchip" aria-label="Allarmi attivi"><svg viewBox="0 0 24 24"><path d="M6 16V11a6 6 0 1112 0v5l1.5 2h-15z"/><path d="M10 21h4"/></svg><span id="alnum">Nessun allarme</span></button>
@@ -956,9 +959,16 @@ const ICON = {
 };
 const PAGES = [['panoramica', 'Panoramica'], ['unifilare', 'Unifilare'], ['analisi', 'Analisi'], ['modbus', 'Modbus'], ['allarmi', 'Allarmi']];
 let page = 'panoramica', lastE = null;
+const BR = Object.assign({ name: 'Energy Monitor', plant: '', product: 'Energy Monitor', logo: 'assets/logo.svg', showName: true }, window.BRAND || {});
+function applyBrand() {
+  document.title = BR.name + ' · ' + BR.product;
+  const l = $('#plogo'); l.src = BR.logo; l.alt = BR.name;
+  $('#pname').textContent = BR.showName ? BR.name + ' · ' + BR.product : BR.product;
+  $('#psub').textContent = BR.plant ? BR.plant + ' · 10 power meter' : '10 power meter';
+}
 function buildNav() {
   const btn = ([k, l]) => `<button class="nav" data-go="${k}" aria-label="${l}"><svg viewBox="0 0 24 24">${ICON[k]}</svg>${l}${k === 'allarmi' ? '<span class="badge" hidden>0</span>' : ''}</button>`;
-  $('#rail').innerHTML = `<div class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg></div>` + PAGES.map(btn).join('');
+  $('#rail').innerHTML = `<div class="mark"><img src="${BR.logo}" alt="${BR.name}"></div>` + PAGES.map(btn).join('');
   $('#tabbar').innerHTML = PAGES.map(btn).join('');
 }
 function go(p, push = true) {
@@ -1015,7 +1025,7 @@ function tick(force) {
 }
 
 /* ================= INIT ================= */
-buildNav(); buildUL(); buildAnalisi(); buildArch(); buildLegend(); buildSim(); bindStack();
+applyBrand(); buildNav(); buildUL(); buildAnalisi(); buildArch(); buildLegend(); buildSim(); bindStack();
 document.addEventListener('click', e => {
   const g = e.target.closest('[data-go]'); if (g) { go(g.dataset.go); return; }
   const q = e.target.closest('[data-ack]'); if (q) { const a = A.find(x => x.id === q.dataset.ack && x.active); if (a) { a.ack = true; rev++; render(lastE); } return; }

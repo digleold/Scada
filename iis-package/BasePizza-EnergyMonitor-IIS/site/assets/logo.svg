@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Base Pizza SRL">
+  <!-- LOGO SEGNAPOSTO: sostituire questo file con il logo ufficiale di Base Pizza SRL (SVG o PNG, vedi assets/config.js) -->
+  <rect width="64" height="64" rx="15" fill="#2B1B10"/>
+  <g transform="translate(32 32)">
+    <circle r="22" fill="#F0B84A"/>
+    <circle r="18" fill="#D9442B"/>
+    <circle cx="-7" cy="-6" r="3.8" fill="#FFF1D0"/>
+    <circle cx="6" cy="-8" r="3.2" fill="#FFF1D0"/>
+    <circle cx="-2" cy="7" r="3.8" fill="#FFF1D0"/>
+    <circle cx="9" cy="5" r="2.8" fill="#FFF1D0"/>
+    <circle cx="-10" cy="6" r="2.2" fill="#FFF1D0"/>
+  </g>
+</svg>
