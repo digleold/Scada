@@ -1,0 +1,1050 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>Fornaria Energy Monitor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: icon rail + header + pages. Hero = animated single-line diagram of the electrical rooms, fed by Modbus TCP power meters.
+   Palette: warm charcoal (oven room), flour-cream text, ember orange = load/accent, electric blue = energy flow, green = PV, semantic ok/warn/crit. */
+:root{
+  --bg:#12100E; --rail:#171412; --surface:#1C1815; --surface2:#26211D; --line:#2F2923; --line2:#41382F;
+  --fg:#F4EDE3; --muted:#A99D8F; --faint:#7C6F62;
+  --accent:#FF8A3D; --accent-ink:#1A0D03; --flow:#5CC6FF; --gen:#A9DB4B;
+  --ok:#4CD08A; --warn:#F2B544; --crit:#FF5A5A;
+  --ok-bg:rgba(76,208,138,.14); --warn-bg:rgba(242,181,68,.15); --crit-bg:rgba(255,90,90,.16);
+  --l1:#E8B04A; --l2:#4FC8B8; --l3:#B391FF;
+  --s1:#FF8A3D; --s2:#F2C14E; --s3:#5CC6FF; --s4:#3E8EDD; --s5:#B391FF; --s6:#4FC8B8; --s7:#A99D8F; --s8:#E96FA0;
+  --scrim:rgba(6,4,3,.62); --shadow:0 18px 40px rgba(0,0,0,.5);
+  --f-display:'Bricolage Grotesque','Segoe UI',system-ui,sans-serif;
+  --f-body:'IBM Plex Sans','Segoe UI',system-ui,sans-serif;
+  --f-mono:'IBM Plex Mono',ui-monospace,Menlo,Consolas,monospace;
+  color-scheme:dark;
+}
+@media (prefers-color-scheme:light){
+  :root:not([data-theme="dark"]){
+    --bg:#F6F1EA; --rail:#FFFFFF; --surface:#FFFFFF; --surface2:#F3EDE5; --line:#E4DACE; --line2:#D0C3B3;
+    --fg:#241C14; --muted:#6D5F51; --faint:#94867A; --accent:#D9560F; --accent-ink:#FFFFFF; --flow:#1479B8; --gen:#5E9A12;
+    --ok:#12804D; --warn:#A86A00; --crit:#D12C36; --ok-bg:rgba(18,128,77,.11); --warn-bg:rgba(168,106,0,.12); --crit-bg:rgba(209,44,54,.10);
+    --l1:#B7791A; --l2:#138A7B; --l3:#6B45C9;
+    --s1:#E4660F; --s2:#C99A12; --s3:#1E96D3; --s4:#2B66B8; --s5:#7E56D6; --s6:#139A89; --s7:#8C7F72; --s8:#D1477E;
+    --scrim:rgba(36,28,20,.35); --shadow:0 18px 40px rgba(60,40,20,.18); color-scheme:light;
+  }
+}
+:root[data-theme="light"]{
+  --bg:#F6F1EA; --rail:#FFFFFF; --surface:#FFFFFF; --surface2:#F3EDE5; --line:#E4DACE; --line2:#D0C3B3;
+  --fg:#241C14; --muted:#6D5F51; --faint:#94867A; --accent:#D9560F; --accent-ink:#FFFFFF; --flow:#1479B8; --gen:#5E9A12;
+  --ok:#12804D; --warn:#A86A00; --crit:#D12C36; --ok-bg:rgba(18,128,77,.11); --warn-bg:rgba(168,106,0,.12); --crit-bg:rgba(209,44,54,.10);
+  --l1:#B7791A; --l2:#138A7B; --l3:#6B45C9;
+  --s1:#E4660F; --s2:#C99A12; --s3:#1E96D3; --s4:#2B66B8; --s5:#7E56D6; --s6:#139A89; --s7:#8C7F72; --s8:#D1477E;
+  --scrim:rgba(36,28,20,.35); --shadow:0 18px 40px rgba(60,40,20,.18); color-scheme:light;
+}
+
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.45 var(--f-body);-webkit-font-smoothing:antialiased}
+button,select{font:inherit;color:inherit}
+button{cursor:pointer}
+h1,h2,h3,p{margin:0}
+.num{font-variant-numeric:tabular-nums}
+.mono{font-family:var(--f-mono)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* shell */
+.app{display:grid;grid-template-columns:76px minmax(0,1fr);min-height:100%}
+.rail{position:sticky;top:env(safe-area-inset-top,0px);height:100vh;display:flex;flex-direction:column;align-items:center;gap:6px;padding:16px 0;background:var(--rail);border-right:1px solid var(--line)}
+.mark{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;margin-bottom:14px;background:linear-gradient(160deg,#FFD9A8,var(--accent));color:#2A1203}
+.mark svg{width:22px;height:22px}
+.nav{width:58px;padding:9px 0 7px;border:0;border-radius:12px;background:none;color:var(--muted);display:flex;flex-direction:column;align-items:center;gap:3px;font-size:10.5px;font-weight:500;position:relative;transition:background .2s,color .2s}
+.nav svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.nav:hover{background:var(--surface2);color:var(--fg)}
+.nav[aria-current="page"]{background:var(--surface2);color:var(--accent)}
+.nav[aria-current="page"]::before{content:"";position:absolute;left:-9px;top:12px;bottom:12px;width:3px;border-radius:0 3px 3px 0;background:var(--accent)}
+.nav .badge{position:absolute;top:3px;right:6px;min-width:16px;height:16px;padding:0 4px;border-radius:8px;background:var(--crit);color:#fff;font-size:10px;font-weight:600;line-height:16px;text-align:center}
+.nav .badge[hidden]{display:none}
+.main{min-width:0;display:flex;flex-direction:column}
+.wrap{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
+.top-in{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:64px;flex-wrap:wrap;padding-block:8px}
+.plant b{display:block;font:700 18px/1.15 var(--f-display);letter-spacing:-.01em}
+.plant span{color:var(--muted);font-size:12px}
+.top-r{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.simclk{display:inline-flex;align-items:center;gap:8px;padding:6px 11px;border:1px solid var(--line);border-radius:999px;font-size:12px;color:var(--muted);background:var(--surface)}
+.simclk b{font:500 13px var(--f-mono);color:var(--fg)}
+.simclk em{font-style:normal;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);font-weight:600}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--ok);animation:ping 2s infinite}
+@keyframes ping{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--ok) 55%,transparent)}80%,100%{box-shadow:0 0 0 8px transparent}}
+.ibtn{display:inline-flex;align-items:center;gap:8px;height:36px;padding:0 12px;border:1px solid var(--line2);background:var(--surface);border-radius:10px;font-size:13px;font-weight:500;transition:background .2s,border-color .2s}
+.ibtn:hover{background:var(--surface2);border-color:var(--faint)}
+.ibtn svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.ibtn.sq{width:36px;padding:0;justify-content:center}
+.alchip{border-color:transparent;background:var(--ok-bg);color:var(--ok)}
+.alchip.warn{background:var(--warn-bg);color:var(--warn)}
+.alchip.crit{background:var(--crit-bg);color:var(--crit);animation:glow 1.3s ease-in-out infinite}
+@keyframes glow{50%{box-shadow:0 0 0 4px color-mix(in srgb,var(--crit) 28%,transparent)}}
+.simwrap{position:relative}
+.menu{position:absolute;right:0;top:44px;z-index:30;width:min(330px,calc(100vw - 32px));background:var(--surface);border:1px solid var(--line2);border-radius:14px;box-shadow:var(--shadow);padding:6px}
+.menu h4{margin:8px 10px 6px;font:500 11px var(--f-body);letter-spacing:.08em;text-transform:uppercase;color:var(--faint)}
+.menu .it{width:100%;display:flex;gap:10px;align-items:flex-start;text-align:left;padding:10px;border:0;background:none;border-radius:9px}
+.menu .it:hover{background:var(--surface2)}
+.menu small{display:block;color:var(--muted);font-size:12px}
+.menu .tick{margin-left:auto;width:18px;height:18px;border-radius:50%;border:1.5px solid var(--line2);flex:none;display:grid;place-items:center;font-size:11px}
+.menu .it.on .tick{background:var(--crit);border-color:var(--crit);color:#fff}
+.menu hr{border:0;border-top:1px solid var(--line);margin:6px 0}
+.speed{display:flex;gap:6px;padding:4px 10px 8px}
+
+main{flex:1;padding-block:20px 40px}
+.stk{display:flex;flex-direction:column;gap:16px}
+.stk[hidden]{display:none}
+.page[hidden]{display:none}
+.page{display:flex;flex-direction:column;gap:16px;animation:rise .45s ease both}
+@keyframes rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+
+/* primitives */
+.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px;min-width:0}
+.card-h{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+.card-h h2{font:700 15px/1.2 var(--f-display);letter-spacing:-.005em}
+.eyebrow{font-size:11px;font-weight:500;letter-spacing:.09em;text-transform:uppercase;color:var(--faint)}
+.pill{display:inline-flex;align-items:center;gap:6px;padding:3px 10px 3px 8px;border-radius:999px;font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;background:var(--surface2);color:var(--muted);white-space:nowrap}
+.pill::before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor}
+.pill.ok{background:var(--ok-bg);color:var(--ok)}.pill.warn{background:var(--warn-bg);color:var(--warn)}.pill.crit{background:var(--crit-bg);color:var(--crit)}
+.pill.crit::before{animation:blink .8s infinite}
+@keyframes blink{50%{opacity:.25}}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chipb{border:1px solid var(--line2);background:none;border-radius:999px;padding:5px 12px;font-size:12px;color:var(--muted);transition:all .2s;display:inline-flex;align-items:center;gap:6px}
+.chipb:hover{color:var(--fg)}
+.chipb[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:600}
+.chipb.lg i{width:9px;height:9px;border-radius:3px;background:var(--c)}
+.chipb.lg[aria-pressed="false"]{opacity:.45}
+.chipb.lg[aria-pressed="true"]{background:var(--surface2);border-color:var(--line2);color:var(--fg);font-weight:500}
+.btn{height:34px;padding:0 14px;border-radius:9px;border:1px solid var(--line2);background:var(--surface2);font-size:13px;font-weight:500;white-space:nowrap}
+.btn:hover{border-color:var(--faint)}
+.btn.pri{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn:disabled{opacity:.5;cursor:default}
+.note{color:var(--faint);font-size:12px;line-height:1.5}
+
+/* kpis */
+.kpis{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:12px}
+.kpi{display:flex;flex-direction:column;gap:6px;overflow:hidden;grid-column:span 4;transition:border-color .3s,transform .25s}
+.kpi:hover{transform:translateY(-2px);border-color:var(--line2)}
+.kpi.crit{border-color:color-mix(in srgb,var(--crit) 60%,var(--line))}
+.kpi.warn{border-color:color-mix(in srgb,var(--warn) 55%,var(--line))}
+.kpi .v{display:flex;align-items:baseline;gap:5px;flex-wrap:wrap}
+.kpi .v b{font:700 clamp(26px,2.4vw,34px)/1 var(--f-display);letter-spacing:-.02em}
+.kpi .v span{color:var(--muted);font-size:13px}
+.kpi small{color:var(--muted);font-size:12px}
+.kpi.crit .v b{color:var(--crit)}
+svg.sp{width:100%;height:34px;display:block;margin-top:2px}
+.up{color:var(--warn)}.dn{color:var(--ok)}
+.gauge{width:100%;max-width:230px;height:auto;display:block;margin:0 auto}
+.gauge .needle{transform-origin:100px 100px;transition:transform 1s cubic-bezier(.3,.8,.3,1)}
+.gauge text{font-family:var(--f-body)}
+
+.grid2{display:grid;grid-template-columns:minmax(0,1.9fr) minmax(0,1fr);gap:16px}
+.grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+.gridh{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+
+/* charts */
+.chart-wrap{position:relative}
+.chart{width:100%;height:300px;display:block;touch-action:pan-y}
+.chart.sm{height:230px}
+.chart .grid{stroke:var(--line);stroke-width:1}
+.chart .axis{fill:var(--faint);font:11px var(--f-mono)}
+.chart .lim{stroke-width:1.2;stroke-dasharray:5 4}
+.chart .lim.crit{stroke:var(--crit)}.chart .lim.warn{stroke:var(--warn)}.chart .lim.ok{stroke:var(--ok)}.chart .lim.mut{stroke:var(--faint)}
+.chart .limt{font:500 10.5px var(--f-mono)}
+.chart .limt.crit{fill:var(--crit)}.chart .limt.warn{fill:var(--warn)}.chart .limt.ok{fill:var(--ok)}.chart .limt.mut{fill:var(--faint)}
+.chart .hv{stroke:var(--faint);stroke-width:1}
+.chart .nowl{stroke:var(--accent);stroke-width:1.2;stroke-dasharray:3 3}
+.chart .nowt{fill:var(--accent);font:600 10.5px var(--f-mono)}
+.tip{position:absolute;top:6px;pointer-events:none;background:var(--surface2);border:1px solid var(--line2);border-radius:10px;padding:8px 10px;font:12px var(--f-mono);white-space:nowrap;box-shadow:var(--shadow);z-index:5}
+.tip b{display:block;margin-bottom:4px;font-weight:500;color:var(--fg)}
+.tip div{display:flex;gap:8px;align-items:center;color:var(--muted)}
+.tip i{width:8px;height:8px;border-radius:2px;background:var(--c)}
+.tip span{margin-left:auto;color:var(--fg);padding-left:12px}
+.legend{display:flex;gap:6px;flex-wrap:wrap;margin-top:12px}
+
+.bars{display:flex;flex-direction:column;gap:11px}
+.bar{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 10px;align-items:baseline}
+.bar .n{font-size:13px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bar .n i{display:inline-block;width:9px;height:9px;border-radius:3px;background:var(--c);margin-right:8px}
+.bar .v{font:500 12.5px var(--f-mono);color:var(--muted)}
+.bar .t{grid-column:1/-1;height:8px;border-radius:4px;background:var(--surface2);overflow:hidden}
+.bar .t u{display:block;height:100%;width:0;border-radius:4px;background:var(--c);transition:width .8s ease;text-decoration:none}
+
+.ins{display:flex;flex-direction:column;gap:10px}
+.insight{display:grid;grid-template-columns:34px minmax(0,1fr);gap:12px;padding:12px;border:1px solid var(--line);border-radius:12px;background:var(--surface2)}
+.insight .ic{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;background:var(--ok-bg);color:var(--ok);font-weight:700}
+.insight.warn .ic{background:var(--warn-bg);color:var(--warn)}.insight.crit .ic{background:var(--crit-bg);color:var(--crit)}
+.insight b{display:block;font-weight:600;margin-bottom:2px}
+.insight p{color:var(--muted);font-size:13px}
+.insight .gain{display:inline-block;margin-top:6px;font:500 12px var(--f-mono);color:var(--accent)}
+
+.evs{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.ev{display:grid;grid-template-columns:78px 10px minmax(0,1fr) auto;gap:12px;align-items:baseline;padding:9px 0;border-top:1px solid var(--line);animation:rise .4s ease both}
+.ev:first-child{border-top:0}
+.ev time{font:12px var(--f-mono);color:var(--muted)}
+.ev i{width:8px;height:8px;border-radius:50%;background:var(--faint);align-self:center}
+.ev.warn i{background:var(--warn)}.ev.crit i{background:var(--crit)}.ev.ok i{background:var(--ok)}
+.ev .tg{font:11.5px var(--f-mono);color:var(--faint)}
+
+/* unifilare */
+.ulwrap{overflow-x:auto;overscroll-behavior-x:contain;background:radial-gradient(circle at 1px 1px,var(--line) 1px,transparent 1.2px) 0 0/24px 24px}
+.ul{display:block;width:100%;min-width:1000px;height:auto}
+.ul .wire{fill:none;stroke:var(--line2);stroke-linecap:round;stroke-linejoin:round}
+.ul .fl{fill:none;stroke:var(--flow);stroke-linecap:round;stroke-dasharray:1 14;animation:flow 1s linear infinite;transition:opacity .4s}
+.ul .fl.gen{stroke:var(--gen);animation-direction:reverse}
+.ul .fl.off{opacity:0}
+@keyframes flow{to{stroke-dashoffset:-15}}
+.ul .t{fill:var(--muted);font:600 11px var(--f-body);letter-spacing:.08em}
+.ul .s{fill:var(--faint);font:11px var(--f-mono)}
+.ul .bdg rect.bx{fill:var(--surface2);stroke:var(--line2);stroke-width:1.2}
+.ul .bdg .id{fill:var(--faint);font:500 10.5px var(--f-mono)}
+.ul .bdg .nm{fill:var(--muted);font:11.5px var(--f-body)}
+.ul .bdg .kw{fill:var(--fg);font:600 16px var(--f-display)}
+.ul .bdg .pf{font:500 10px var(--f-mono);fill:var(--muted)}
+.ul .eq{cursor:pointer;outline:none}
+.ul .eq:hover rect.bx,.ul .eq:focus-visible rect.bx{stroke:var(--accent)}
+.ul .eq.warn rect.bx{stroke:var(--warn)}
+.ul .eq.crit rect.bx{stroke:var(--crit);animation:halo 1s ease-in-out infinite}
+@keyframes halo{50%{stroke-opacity:.25}}
+.ul .eq.off rect.bx{stroke-dasharray:4 3}.ul .eq.off .kw{fill:var(--faint)}
+.ul .ring{fill:none;stroke:var(--c);stroke-width:3;stroke-dasharray:14 9;transform-box:fill-box;transform-origin:center;animation:spin var(--sp,4s) linear infinite}
+.ul .ring.off{animation-play-state:paused;opacity:.3}
+@keyframes spin{to{transform:rotate(360deg)}}
+.ul .core{fill:var(--surface);stroke:var(--line2);stroke-width:1.5}
+.ul .tr circle{fill:var(--surface);stroke:var(--flow);stroke-width:2.2}
+.ul .trb{fill:var(--surface2)}
+.ul .trf{fill:var(--accent);transition:width .8s}
+.ul .gridsym{fill:none;stroke:var(--flow);stroke-width:2}
+.chip3{display:flex;gap:10px;flex-wrap:wrap;padding:12px 16px;border-top:1px solid var(--line);color:var(--muted);font-size:12px}
+.chip3 span{display:inline-flex;align-items:center;gap:7px}
+.chip3 i{width:18px;height:0;border-top:4px dotted var(--c)}
+
+/* drawer */
+.scrim{position:fixed;inset:0;background:var(--scrim);opacity:0;pointer-events:none;transition:opacity .3s;z-index:40}
+.scrim.on{opacity:1;pointer-events:auto}
+.drawer{position:fixed;z-index:50;top:0;right:0;bottom:0;width:min(420px,100%);background:var(--surface);border-left:1px solid var(--line2);box-shadow:var(--shadow);transform:translateX(105%);transition:transform .38s cubic-bezier(.2,.8,.2,1);display:flex;flex-direction:column;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);visibility:hidden}
+.drawer.on{transform:none;visibility:visible}
+.dr-h{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;padding:18px 18px 12px}
+.dr-h h3{font:700 20px/1.15 var(--f-display);letter-spacing:-.01em;margin-top:4px}
+.dr-b{padding:0 18px 18px;overflow:auto;display:flex;flex-direction:column;gap:16px}
+.mets{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.met{background:var(--surface2);border-radius:10px;padding:10px}
+.met small{display:block;color:var(--muted);font-size:11.5px;margin-bottom:3px}
+.met b{font:700 19px/1.1 var(--f-display)}
+.met span{color:var(--muted);font-size:12px;margin-left:2px}
+.phs{display:flex;flex-direction:column;gap:8px}
+.ph{display:grid;grid-template-columns:28px minmax(0,1fr) 74px;gap:10px;align-items:center;font:12.5px var(--f-mono)}
+.ph .t{height:8px;border-radius:4px;background:var(--surface2);overflow:hidden}
+.ph .t u{display:block;height:100%;border-radius:4px;background:var(--c);transition:width .6s;text-decoration:none}
+.xbtn{width:34px;height:34px;border-radius:10px;border:1px solid var(--line2);background:none;font-size:18px;line-height:1}
+.xbtn:hover{background:var(--surface2)}
+
+/* tables, heatmap */
+.tw{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;font-weight:500;color:var(--faint);font-size:11px;letter-spacing:.08em;text-transform:uppercase;padding:0 12px 8px 0;white-space:nowrap}
+td{padding:10px 12px 10px 0;border-top:1px solid var(--line);white-space:nowrap}
+td.mono{font-size:12.5px}
+tr.sel td{background:color-mix(in srgb,var(--accent) 8%,transparent)}
+tr.clk{cursor:pointer}tr.clk:hover td{background:var(--surface2)}
+.hm{width:100%;height:auto;display:block}
+.hm text{fill:var(--faint);font:6.4px var(--f-mono)}
+.hm rect{transition:fill .5s}
+.hmleg{display:flex;align-items:center;gap:8px;color:var(--faint);font:11px var(--f-mono);margin-top:8px}
+.hmleg u{display:block;flex:1;max-width:220px;height:8px;border-radius:4px;text-decoration:none;background:linear-gradient(90deg,var(--surface2),color-mix(in srgb,var(--accent) 55%,var(--surface2)),var(--accent))}
+.big{font:700 30px/1 var(--f-display);letter-spacing:-.02em}
+.big small{font:500 14px var(--f-body);color:var(--muted);margin-left:4px;letter-spacing:0}
+.stat3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.stat3 .met b{font-size:22px}
+
+/* modbus */
+.arch{display:flex;align-items:center;gap:0;flex-wrap:nowrap;overflow-x:auto;padding:4px 2px 10px}
+.node{flex:none;min-width:126px;padding:10px 12px;border:1px solid var(--line2);border-radius:12px;background:var(--surface2);text-align:center}
+.node b{display:block;font:600 13px var(--f-display)}
+.node span{display:block;color:var(--muted);font-size:11.5px}
+.link{flex:1 0 54px;height:14px;position:relative}
+.link::before{content:"";position:absolute;left:0;right:0;top:6px;border-top:3px dotted var(--flow);animation:lk 1s linear infinite;background:none}
+.link.rev::before{animation-direction:reverse}
+@keyframes lk{to{background-position:0 0;transform:translateX(0)}}
+.link{background:repeating-linear-gradient(90deg,var(--flow) 0 3px,transparent 3px 12px) 0 6px/auto 3px no-repeat;animation:lkm 1s linear infinite}
+.link::before{display:none}
+@keyframes lkm{to{background-position:12px 6px}}
+.link.rev{animation-direction:reverse}
+.log{font:12px/1.5 var(--f-mono);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px 12px;height:290px;overflow:hidden;display:flex;flex-direction:column;justify-content:flex-end}
+.log div{flex:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;animation:rise .3s ease both}
+.log .tx{color:var(--flow)}.log .rx{color:var(--fg)}.log .dc{color:var(--accent);padding-left:14px}.log .er{color:var(--crit)}
+.log .ts{color:var(--faint)}
+.q{display:inline-block;width:60px;height:6px;border-radius:3px;background:var(--surface2);overflow:hidden;vertical-align:middle;margin-right:6px}
+.q u{display:block;height:100%;background:var(--ok);text-decoration:none}
+
+/* alarms */
+.acount{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.acount .card{display:flex;align-items:center;gap:14px}
+.acount b{font:700 36px/1 var(--f-display)}
+.acount small{color:var(--muted)}
+.alist{display:flex;flex-direction:column;gap:8px}
+.arow{display:grid;grid-template-columns:4px 92px minmax(0,1fr) auto;gap:14px;align-items:center;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px 12px 0;overflow:hidden;animation:rise .35s ease both}
+.arow .st{align-self:stretch;background:var(--faint)}
+.arow.warn .st{background:var(--warn)}.arow.crit .st{background:var(--crit)}
+.arow.crit.un{background:linear-gradient(90deg,var(--crit-bg),transparent 60%),var(--surface)}
+.arow.cleared{opacity:.62}
+.arow time{font:12.5px var(--f-mono);color:var(--muted)}
+.arow .tx{min-width:0}.arow .tx b{font-weight:500;display:block}.arow .tx small{font:12px var(--f-mono);color:var(--faint)}
+.empty{padding:36px 16px;text-align:center;color:var(--muted);border:1px dashed var(--line2);border-radius:12px}
+
+.toasts{position:fixed;z-index:60;top:calc(72px + env(safe-area-inset-top,0px));right:max(16px,env(safe-area-inset-right,0px));display:flex;flex-direction:column;gap:8px;width:min(360px,calc(100vw - 32px));pointer-events:none}
+.toast{pointer-events:auto;display:grid;grid-template-columns:4px minmax(0,1fr);background:var(--surface);border:1px solid var(--line2);border-radius:12px;box-shadow:var(--shadow);overflow:hidden;animation:tin .45s cubic-bezier(.2,.9,.3,1.2) both}
+.toast.out{animation:tout .3s ease both}
+.toast .st{background:var(--warn)}.toast.crit .st{background:var(--crit)}.toast.ok .st{background:var(--ok)}
+.toast div{padding:10px 12px}
+.toast b{display:block;font-size:12px;letter-spacing:.07em;text-transform:uppercase;color:var(--warn)}
+.toast.crit b{color:var(--crit)}.toast.ok b{color:var(--ok)}
+.toast span{font-size:13px}
+@keyframes tin{from{transform:translateX(120%) rotate(2deg);opacity:0}}
+@keyframes tout{to{transform:translateX(120%);opacity:0}}
+.tabbar{display:none}
+canvas.scope{width:100%;height:240px;display:block;border-radius:10px;background:var(--bg);border:1px solid var(--line)}
+
+@media (max-width:1180px){
+  .kpi{grid-column:span 6}.kpi.gaugek{grid-column:span 12}.kpis .kpi:last-child{grid-column:span 12}
+  .grid2,.grid3{grid-template-columns:minmax(0,1fr)}
+}
+@media (max-width:820px){
+  .app{grid-template-columns:minmax(0,1fr)}
+  .rail{display:none}
+  .tabbar{display:grid;grid-template-columns:repeat(5,1fr);position:fixed;z-index:30;left:0;right:0;bottom:0;background:var(--rail);border-top:1px solid var(--line);padding:6px max(8px,env(safe-area-inset-right,0px)) calc(6px + env(safe-area-inset-bottom,0px)) max(8px,env(safe-area-inset-left,0px))}
+  .tabbar .nav{width:100%}
+  .tabbar .nav[aria-current="page"]::before{left:22%;right:22%;top:-7px;bottom:auto;width:auto;height:3px;border-radius:0 0 3px 3px}
+  main{padding-bottom:96px}
+  .gridh,.acount{grid-template-columns:minmax(0,1fr)}
+  .ibtn .lbl{display:none}.ibtn.simb{padding:0;width:36px;justify-content:center}
+  .simclk .lbl2{display:none}
+  .drawer{top:auto;left:0;right:0;width:100%;max-height:84%;border-left:0;border-top:1px solid var(--line2);border-radius:18px 18px 0 0;transform:translateY(105%)}
+  .drawer.on{transform:none}
+  .arow{grid-template-columns:4px minmax(0,1fr);padding:12px 14px 12px 0}
+  .arow time,.arow .tx,.arow .acts{grid-column:2}
+  .ev{grid-template-columns:64px 10px minmax(0,1fr)}.ev .tg{display:none}
+  .toasts{top:calc(64px + env(safe-area-inset-top,0px))}
+  .chart{height:260px}
+}
+@media (max-width:560px){
+  .kpi{grid-column:span 6}.kpi.gaugek{grid-column:span 12}
+  .mets,.stat3{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .simclk em{display:none}
+}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="rail" id="rail" aria-label="Navigazione"></aside>
+  <div class="main">
+    <header class="top">
+      <div class="top-in wrap">
+        <div class="plant"><b>Fornaria Demo · Energy Monitor</b><span>Basi pizza e prodotti da forno · Stabilimento 01 · 10 power meter</span></div>
+        <div class="top-r">
+          <span class="simclk" title="Orario simulato della demo"><i class="dot"></i><em>Demo</em><b id="clk">--:--</b><span class="lbl2" id="clkd">--</span><span id="spd" class="mono"></span></span>
+          <button class="ibtn alchip" id="alchip" aria-label="Allarmi attivi"><svg viewBox="0 0 24 24"><path d="M6 16V11a6 6 0 1112 0v5l1.5 2h-15z"/><path d="M10 21h4"/></svg><span id="alnum">Nessun allarme</span></button>
+          <div class="simwrap">
+            <button class="ibtn simb" id="simbtn" aria-haspopup="true" aria-expanded="false"><svg viewBox="0 0 24 24"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg><span class="lbl">Scenari demo</span></button>
+            <div class="menu" id="simmenu" hidden></div>
+          </div>
+          <button class="ibtn sq" id="themebtn" aria-label="Cambia tema"><svg viewBox="0 0 24 24" id="themeico"></svg></button>
+        </div>
+      </div>
+    </header>
+
+    <main class="wrap">
+      <!-- PANORAMICA -->
+      <section class="page" id="p-panoramica">
+        <div class="kpis">
+          <div class="card kpi gaugek" id="k-pow">
+            <span class="eyebrow">Potenza prelevata dalla rete</span>
+            <svg class="gauge" viewBox="-18 0 236 142" id="gauge"></svg>
+            <small id="gs" style="text-align:center"></small>
+          </div>
+          <div class="card kpi" id="k-en"><span class="eyebrow">Energia prelevata oggi</span><div class="v"><b class="num" id="v-en">0</b><span>kWh</span></div><small id="s-en"></small><svg class="sp" id="sp-en" preserveAspectRatio="none"></svg></div>
+          <div class="card kpi" id="k-cost"><span class="eyebrow">Costo energia oggi</span><div class="v"><b class="num" id="v-cost">0</b><span>€</span></div><small id="s-cost"></small><svg class="sp" id="sp-cost" preserveAspectRatio="none"></svg></div>
+          <div class="card kpi" id="k-pf"><span class="eyebrow">Cosφ generale</span><div class="v"><b class="num" id="v-pf">0</b><span id="pfp"></span></div><small id="s-pf"></small><svg class="sp" id="sp-pf" preserveAspectRatio="none"></svg></div>
+          <div class="card kpi" id="k-pv"><span class="eyebrow">Fotovoltaico 250 kWp</span><div class="v"><b class="num" id="v-pv">0</b><span>kW</span></div><small id="s-pv"></small><svg class="sp" id="sp-pv" preserveAspectRatio="none"></svg></div>
+          <div class="card kpi" id="k-int"><span class="eyebrow">Intensità energetica oggi</span><div class="v"><b class="num" id="v-int">0</b><span>kWh/t</span></div><small id="s-int"></small><svg class="sp" id="sp-int" preserveAspectRatio="none"></svg></div>
+        </div>
+
+        <div class="grid2">
+          <div class="card">
+            <div class="card-h"><h2>Curva di carico di oggi · assorbimenti per reparto</h2><span class="eyebrow">media su 15 minuti</span></div>
+            <div class="chart-wrap"><svg class="chart" id="stack" role="img" aria-label="Curva di carico"></svg><div class="tip" id="stip" hidden></div></div>
+            <div class="legend" id="stkleg"></div>
+          </div>
+          <div class="card">
+            <div class="card-h"><h2>Ripartizione consumi oggi</h2><span class="eyebrow" id="splitt"></span></div>
+            <div class="bars" id="split"></div>
+          </div>
+        </div>
+
+        <div class="gridh">
+          <div class="card"><div class="card-h"><h2>Analisi automatiche</h2><span class="eyebrow">sui dati dei misuratori</span></div><div class="ins" id="ins"></div></div>
+          <div class="card"><div class="card-h"><h2>Eventi recenti</h2><button class="btn" data-go="allarmi">Vai agli allarmi</button></div><ul class="evs" id="evs"></ul></div>
+        </div>
+      </section>
+
+      <!-- UNIFILARE -->
+      <section class="page" id="p-unifilare" hidden>
+        <div class="card" style="padding:0;overflow:hidden">
+          <div class="card-h" style="padding:14px 16px;margin:0;border-bottom:1px solid var(--line)">
+            <div><h2>Schema unifilare · cabine e quadri</h2><span class="note" id="ulhint">Tocca un misuratore per i dettagli. Scorri in orizzontale sul telefono.</span></div>
+            <span class="eyebrow">dati letti via Modbus TCP</span>
+          </div>
+          <div class="ulwrap"><svg class="ul" id="ul" viewBox="0 0 1240 640" role="group" aria-label="Schema unifilare"></svg></div>
+          <div class="chip3">
+            <span style="--c:var(--flow)"><i></i>Energia verso i carichi</span>
+            <span style="--c:var(--gen)"><i></i>Produzione fotovoltaica</span>
+            <span><b class="mono" style="color:var(--accent)">▮</b> carico trasformatore</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- ANALISI -->
+      <section class="page" id="p-analisi" hidden>
+        <div class="chips" id="atabs" role="group" aria-label="Analisi"></div>
+        <div id="a-fasce" class="stk"></div><div id="a-int" class="stk" hidden></div><div id="a-base" class="stk" hidden></div><div id="a-pq" class="stk" hidden></div>
+      </section>
+
+      <!-- MODBUS -->
+      <section class="page" id="p-modbus" hidden>
+        <div class="card">
+          <div class="card-h"><h2>Acquisizione dati</h2><span class="eyebrow">Modbus TCP/IP · polling ciclico</span></div>
+          <div class="arch" id="arch"></div>
+        </div>
+        <div class="card">
+          <div class="card-h"><h2>Misuratori collegati</h2><span class="eyebrow">tocca una riga per vedere i registri</span></div>
+          <div class="tw"><table><thead><tr><th>ID</th><th>Ubicazione</th><th>Modello</th><th>Indirizzo</th><th>Unit ID</th><th>Collegamento</th><th>Stato</th><th>Latenza</th><th>Qualità 24 h</th><th>Errori</th></tr></thead><tbody id="mbt"></tbody></table></div>
+        </div>
+        <div class="gridh">
+          <div class="card"><div class="card-h"><h2>Transazioni Modbus in tempo reale</h2><span class="eyebrow">FC03 · Read Holding Registers</span></div><div class="log" id="mlog"></div></div>
+          <div class="card"><div class="card-h"><h2 id="regt">Registri letti</h2><span class="eyebrow" id="regs"></span></div><div class="tw"><table><thead><tr><th>Registro</th><th>Grandezza</th><th>Tipo</th><th>Valore</th><th>Ciclo</th></tr></thead><tbody id="regb"></tbody></table></div>
+            <p class="note" style="margin-top:10px">Mappa indicativa dei PM5xxx. Indirizzi, offset 0/1 e ordine delle word vanno confermati sul Modbus Register List ufficiale Schneider del modello installato. PM2230 e iEM3255 hanno mappe diverse.</p></div>
+        </div>
+      </section>
+
+      <!-- ALLARMI -->
+      <section class="page" id="p-allarmi" hidden>
+        <div class="acount" id="acount"></div>
+        <div class="card-h" style="margin:4px 0 -4px"><div class="chips" id="afilter" role="group" aria-label="Filtro allarmi"></div><button class="btn pri" id="ackall">Riconosci tutti</button></div>
+        <div class="alist" id="alist"></div>
+      </section>
+    </main>
+  </div>
+</div>
+<nav class="tabbar" id="tabbar" aria-label="Navigazione"></nav>
+<div class="scrim" id="scrim"></div>
+<aside class="drawer" id="drawer" aria-label="Dettaglio misuratore"></aside>
+<div class="toasts" id="toasts" aria-live="polite"></div>
+
+<script>
+(() => {
+'use strict';
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+const fmt = (v, d = 0) => (isFinite(v) ? v : 0).toLocaleString('it-IT', { minimumFractionDigits: d, maximumFractionDigits: d, useGrouping: 'always' });
+const pad = n => String(n).padStart(2, '0');
+const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const store = { get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} } };
+
+/* ================= CONFIG ================= */
+const DAY = 864e5, SLOT = 9e5, NS = 96;
+const CONTRACT = 1000, TRAFO = [1000, 630];
+const PRICE = { 1: .285, 2: .262, 3: .218 };   // €/kWh, valori di esempio
+const PEN_RATE = .0125;                        // €/kVArh sopra soglia, valore di esempio
+const GROUPS = ['M02', 'M03', 'M04', 'M05', 'M06', 'M07', 'M08', 'M10'];
+const MT = [
+  { id: 'M01', name: 'Generale cabina MT/BT', short: 'Generale', loc: 'Cabina MT/BT principale', model: 'PM5560', ip: '10.20.1.11', unit: 1, via: 'Ethernet diretto' },
+  { id: 'M02', name: 'Linee produzione basi pizza', short: 'Produzione', loc: 'QE-PRD · impasto e laminazione', model: 'PM5340', ip: '10.20.1.12', unit: 1, via: 'Ethernet diretto', pf: .94, thd: 6, imb: .025, pmax: 190 },
+  { id: 'M03', name: 'Forni a tunnel e ventilazione', short: 'Forni', loc: 'QE-FRN · sala forni', model: 'PM5340', ip: '10.20.1.13', unit: 1, via: 'Ethernet diretto', pf: .96, thd: 5, imb: .02, pmax: 155 },
+  { id: 'M04', name: 'Surgelazione e abbattitori', short: 'Surgelaz.', loc: 'QE-SRG · tunnel di surgelazione', model: 'PM5560', ip: '10.20.1.14', unit: 1, via: 'Ethernet diretto', pf: .88, thd: 14, imb: .03, pmax: 165 },
+  { id: 'M05', name: 'Centrale frigorifera e celle', short: 'Frigo', loc: 'Centrale frigo · compressori', model: 'PM5560', ip: '10.20.1.21', unit: 1, via: 'Ethernet diretto', pf: .86, thd: 11, imb: .035, pmax: 140 },
+  { id: 'M06', name: 'Confezionamento e pallettizzazione', short: 'Confezion.', loc: 'QE-CNF · linee di confezionamento', model: 'PM2230', ip: '10.20.1.30', unit: 3, via: 'Gateway Modbus RTU', pf: .94, thd: 9, imb: .03, pmax: 78 },
+  { id: 'M07', name: 'Aria compressa', short: 'Aria compr.', loc: 'Locale compressori', model: 'PM2230', ip: '10.20.1.30', unit: 4, via: 'Gateway Modbus RTU', pf: .9, thd: 12, imb: .025, pmax: 66 },
+  { id: 'M08', name: 'Servizi generali e uffici', short: 'Servizi', loc: 'QE-SRV · luce, HVAC, uffici', model: 'iEM3255', ip: '10.20.1.30', unit: 5, via: 'Gateway Modbus RTU', pf: .97, thd: 4, imb: .05, pmax: 56 },
+  { id: 'M09', name: 'Impianto fotovoltaico 250 kWp', short: 'Fotovoltaico', loc: 'Cabina FV · inverter', model: 'PM5340', ip: '10.20.1.15', unit: 1, via: 'Ethernet diretto', pf: 1, thd: 3, imb: .01, pmax: 110 },
+  { id: 'M10', name: 'Silos farine e trasporto pneumatico', short: 'Silos farine', loc: 'QE-MLN · impasto e farine', model: 'PM2230', ip: '10.20.1.30', unit: 6, via: 'Gateway Modbus RTU', pf: .91, thd: 10, imb: .03, pmax: 52 }
+];
+const MBY = Object.fromEntries(MT.map(m => [m.id, m]));
+const GIDX = Object.fromEntries(GROUPS.map((g, i) => [g, i + 1]));
+
+/* ================= SIM CLOCK & NOISE ================= */
+function startTime() { const d = new Date(); d.setHours(10, 40, 0, 0); while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() - 1); return +d; }
+const T0 = startTime();
+const SIM = { t: T0, speed: 1 };
+const dayStart = t => { const d = new Date(t); d.setHours(0, 0, 0, 0); return +d; };
+const hod = t => { const d = new Date(t); return d.getHours() + d.getMinutes() / 60 + d.getSeconds() / 3600; };
+const dow = t => new Date(t).getDay();
+function h32(a, b) { let x = (Math.imul(a | 0, 374761393) + Math.imul(b | 0, 668265263)) | 0; x = Math.imul(x ^ (x >>> 13), 1274126177); x ^= x >>> 16; return (x >>> 0) / 4294967296; }
+const vn = (seed, t, per) => { const u = t / per, k = Math.floor(u), f = u - k, a = h32(seed, k) * 2 - 1, b = h32(seed, k + 1) * 2 - 1, s = f * f * (3 - 2 * f); return a + (b - a) * s; };
+const ramp = (x, a, b) => clamp((x - a) / (b - a), 0, 1);
+const dayId = t => Math.floor(dayStart(t) / DAY);
+function runF(t) { const h = hod(t), w = dow(t); if (w === 0) return 0; if (w === 6) return clamp(ramp(h, 4.6, 5.4) - ramp(h, 12.6, 13.4), 0, 1); return clamp(ramp(h, 4.6, 5.4) - ramp(h, 22.6, 23.4), 0, 1); }
+const dayF = t => 1 + .05 * (h32(dayId(t), 7) * 2 - 1);
+const sq = (t, per) => .5 + .5 * Math.tanh(3 * Math.sin(2 * Math.PI * t / per));
+const amb = t => .5 + .5 * Math.sin(2 * Math.PI * (hod(t) - 9) / 24);
+const dayt = t => { const w = dow(t), h = hod(t); return (w >= 1 && w <= 5 ? 1 : w === 6 ? .35 : .1) * (ramp(h, 6.5, 8) - ramp(h, 17, 19)); };
+function fascia(t) { const w = dow(t), h = hod(t); if (w === 0) return 3; if (w === 6) return (h < 7 || h >= 23) ? 3 : 2; if (h >= 8 && h < 19) return 1; if ((h >= 7 && h < 8) || (h >= 19 && h < 23)) return 2; return 3; }
+const prodRate = t => 3.1 * runF(t) * dayF(t);   // t/h di basi pizza, dato MES simulato
+
+/* ================= LOAD MODEL ================= */
+const LP = {
+  M02: (t, r) => 12 + 170 * r * (1 + .05 * vn(2, t, 6e5)) + 10 * r * sq(t, 12e5),
+  M03: (t, r) => 34 + 118 * r * (1 + .04 * vn(3, t, 9e5)),
+  M04: (t, r) => 14 + 148 * r * (.5 + .5 * sq(t, 30e5)),
+  M05: (t, r) => 44 + 80 * r + 12 * amb(t) + 5 * vn(5, t, 12e5),
+  M06: (t, r) => 5 + 68 * r * (1 + .12 * vn(6, t, 3e5)),
+  M07: (t, r) => 13 + 50 * r * (.82 + .18 * vn(7, t, 2e5)),
+  M08: (t, r) => 17 + 34 * dayt(t) + 5 * vn(8, t, 18e5),
+  M10: (t, r) => 3 + 44 * r * (.4 + .6 * (.5 + .5 * Math.sin(t / 4e5)))
+};
+function pv(t) { const h = hod(t), x = (h - 7.7) / 9.1; if (x <= 0 || x >= 1) return 0; const w = .45 + .55 * h32(dayId(t), 3); return 108 * Math.pow(Math.sin(Math.PI * x), 1.3) * w * (1 + .06 * vn(9, t, 3e5)); }
+const SC = { peak: null, pf: null, comm: null, leak: null, phase: null };
+const scOn = (k, t) => SC[k] && t >= SC[k].start && (SC[k].end == null || t < SC[k].end);
+const PK = { M02: 25, M03: 70, M04: 75, M07: 35 };
+const baseP = (id, t) => id === 'M09' ? pv(t) : Math.max(0, LP[id](t, runF(t)) * dayF(t));
+function P(id, t) {
+  let p = baseP(id, t);
+  if (scOn('peak', t)) p += (PK[id] || 0) * ramp((t - SC.peak.start) / 1e3, 0, 20);
+  if (scOn('leak', t) && id === 'M07') p += 55;
+  return p;
+}
+const baseImport = t => GROUPS.reduce((s, g) => s + baseP(g, t), 0) * 1.012 - pv(t);
+
+function elecLoad(id, t) {
+  const c = MBY[id], p = P(id, t), load = clamp(p / c.pmax, 0, 1.2);
+  let pf = id === 'M09' ? .995 : c.pf - .09 * Math.pow(1 - clamp(load, 0, 1), 2) + .004 * vn(11, t, 3e5);
+  if (scOn('pf', t) && (id === 'M04' || id === 'M05')) pf -= .12 * ramp((t - SC.pf.start) / 1e3, 0, 20);
+  pf = clamp(pf, .62, .999);
+  const q = p * Math.tan(Math.acos(pf)), s = p / pf;
+  let imb = c.imb; if (scOn('phase', t) && id === 'M04') imb = .09;
+  const v0 = 232 - 3 * clamp(p / 100, 0, 6) * .1 - .6;
+  const v = [0, 1, 2].map(i => v0 * (1 + .004 * vn(20 + i, t, 4e5)));
+  if (scOn('phase', t) && id === 'M04') v[2] *= .975;
+  const ia = s * 1000 / (3 * v0), f = [1 + imb, 1 - imb * .55, 1 - imb * .45];
+  const i = f.map(x => ia * x);
+  const mv = (v[0] + v[1] + v[2]) / 3, vunb = Math.max(...v.map(x => Math.abs(x - mv))) / mv * 100;
+  const iavg = (i[0] + i[1] + i[2]) / 3, iunb = Math.max(...i.map(x => Math.abs(x - iavg))) / (iavg || 1) * 100;
+  const thd = c.thd * (1.4 - .5 * clamp(load, 0, 1)) * (1 + .05 * vn(40, t, 3e5));
+  return { p, q, s, pf, v, i, thd, f: 50 + .03 * vn(30, t, 2e5), vunb, iunb, load };
+}
+function elecMain(E, t) {
+  const p = GROUPS.reduce((s, g) => s + E[g].p, 0) * 1.012 - E.M09.p;
+  const q = GROUPS.reduce((s, g) => s + E[g].q, 0) + .015 * Math.hypot(p, 0);
+  const s = Math.hypot(p, q), v0 = 231.4, v = [0, 1, 2].map(i => v0 * (1 + .003 * vn(50 + i, t, 4e5)));
+  const ia = s * 1000 / (3 * v0), i = [ia * 1.015, ia * .99, ia * .995];
+  const mv = (v[0] + v[1] + v[2]) / 3;
+  return { p, q, s, pf: p / (s || 1), v, i, thd: 4.6 * (1 + .05 * vn(41, t, 3e5)), f: 50 + .03 * vn(30, t, 2e5), vunb: Math.max(...v.map(x => Math.abs(x - mv))) / mv * 100, iunb: 1.5, load: p / CONTRACT };
+}
+function snapshot(t) { const E = {}; GROUPS.forEach(g => E[g] = elecLoad(g, t)); E.M09 = elecLoad('M09', t); E.M01 = elecMain(E, t); return E; }
+
+/* ================= DAY STATS (cached for past days) ================= */
+const statCache = new Map();
+function dayStats(ds, live) {
+  const key = ds; if (!live && statCache.has(key)) return statCache.get(key);
+  const n = live ? clamp(Math.ceil((SIM.t - ds) / SLOT), 0, NS) : NS;
+  const S = { imp: new Float32Array(NS), g: {}, pv: new Float32Array(NS), n, kwh: 0, cons: 0, pvk: 0, kF: [0, 0, 0], kvarh: 0, kvarhExcess: 0, tons: 0, peak: 0, peakI: 0, grp: {}, cost: 0 };
+  GROUPS.forEach(g => { S.g[g] = new Float32Array(NS); S.grp[g] = 0; });
+  for (let i = 0; i < n; i++) {
+    const c = ds + i * SLOT + SLOT / 2, t = live ? Math.min(c, SIM.t) : c;
+    const w = live && i === n - 1 ? clamp((SIM.t - (ds + i * SLOT)) / SLOT, 0, 1) : 1;
+    let sp = 0, sq_ = 0;
+    GROUPS.forEach(g => { const e = elecLoad(g, t); S.g[g][i] = e.p; sp += e.p; sq_ += e.q; S.grp[g] += e.p * .25 * w; });
+    const pvp = P('M09', t); S.pv[i] = pvp;
+    const imp = sp * 1.012 - pvp; S.imp[i] = imp;
+    const kw = imp * .25 * w; S.kwh += kw; S.cons += sp * .25 * w; S.pvk += pvp * .25 * w; S.kF[fascia(c) - 1] += kw;
+    const qq = (sq_ + .015 * imp) * .25 * w; S.kvarh += qq;
+    if (fascia(c) !== 3) S.kvarhExcess += Math.max(0, qq - .33 * kw);
+    S.tons += prodRate(c) * .25 * w;
+    if (imp > S.peak) { S.peak = imp; S.peakI = i; }
+  }
+  S.cost = S.kF[0] * PRICE[1] + S.kF[1] * PRICE[2] + S.kF[2] * PRICE[3];
+  if (!live) statCache.set(key, S);
+  return S;
+}
+let todayMemo = { k: '', v: null };
+function today() { const k = Math.floor(SIM.t / 6e4) + '|' + Object.values(SC).map(x => x ? x.start + ':' + x.end : '-').join(','); if (todayMemo.k !== k) todayMemo = { k, v: dayStats(dayStart(SIM.t), true) }; return todayMemo.v; }
+const stats = ds => ds === dayStart(SIM.t) ? today() : dayStats(ds, false);
+const daysBack = n => { const d0 = dayStart(SIM.t), a = []; for (let i = n - 1; i >= 0; i--) { const d = new Date(d0); d.setDate(d.getDate() - i); d.setHours(0, 0, 0, 0); a.push(+d); } return a; };
+function monthToDate() { const d0 = dayStart(SIM.t), d = new Date(d0); d.setDate(1); const a = []; while (+d <= d0) { a.push(+d); d.setDate(d.getDate() + 1); } return a; }
+
+/* ================= ALARMS & LOG ================= */
+const A = []; let rev = 1; let filter = 'attivi';
+const LOG = [];
+const logEv = (sev, text, tag, t) => { LOG.unshift({ t: t || SIM.t, sev, text, tag }); if (LOG.length > 40) LOG.pop(); rev++; };
+const quiet = id => { const c = A.find(a => a.id === id && a.active); if (c) { c.active = false; c.t1 = SIM.t; rev++; } };
+(() => { const d = dayStart(T0); [['ok', 'Avvio turno A · linee produzione in marcia', 'LINEE', 5, 0], ['ok', 'Batteria di rifasamento KB-01 inserita', 'KB-01', 5, 12], ['ok', 'Cambio fascia: F1 (picco)', 'TARIFFE', 8, 0], ['warn', 'Picco 15\' a 842 kW (84 % della potenza impegnata)', 'M01', 8, 15], ['ok', 'Ciclo di surgelazione 2 avviato', 'M04', 9, 5], ['ok', 'Sincronizzazione orologi power meter completata', 'MODBUS', 6, 0]].forEach(([s, x, g, h, m]) => LOG.push({ t: d + h * 36e5 + m * 6e4, sev: s, text: x, tag: g })); LOG.sort((a, b) => b.t - a.t); })();
+function setAlarm(id, sev, text, tag) {
+  const cur = A.find(a => a.id === id && a.active);
+  if (!sev) { if (cur) { cur.active = false; cur.t1 = SIM.t; rev++; logEv('ok', cur.text + ' · rientrato', cur.tag); } return; }
+  if (!cur) { A.unshift({ id, sev, text, tag, t0: SIM.t, ack: false, active: true }); rev++; logEv(sev, text, tag); toast(sev, text); }
+  else if (cur.sev !== sev) { cur.sev = sev; cur.text = text; cur.ack = false; rev++; logEv(sev, text, tag); toast(sev, text); }
+}
+function evaluate(E) {
+  const m = E.M01, t = SIM.t;
+  setAlarm('peak', m.p > CONTRACT ? 'crit' : m.p > .93 * CONTRACT ? 'warn' : null, m.p > CONTRACT ? `Superata la potenza impegnata: ${fmt(m.p)} kW su ${fmt(CONTRACT)} kW` : `Prelievo vicino al limite di impegno: ${fmt(m.p)} kW (${fmt(m.p / CONTRACT * 100)} %)`, 'M01 · cabina MT/BT');
+  setAlarm('pf', m.p > 200 && m.pf < .85 ? 'crit' : m.p > 200 && m.pf < .9 ? 'warn' : null, `Cosφ generale basso: ${fmt(m.pf, 2)} (soglia 0,95). Penale sulla reattiva in vista`, 'M01 · rifasamento');
+  setAlarm('comm', scOn('comm', t) ? 'crit' : null, 'M06 non risponde: timeout Modbus sul gateway GW-01 (unit 3)', 'M06 · 10.20.1.30');
+  GROUPS.forEach(g => { const b = baseP(g, t), d = E[g].p - b; setAlarm('dev' + g, d > Math.max(12, .2 * b) ? 'warn' : null, `${MBY[g].short}: ${fmt(E[g].p)} kW contro ${fmt(b)} kW attesi dalla baseline (+${fmt(d)} kW)`, `${g} · baseline`); });
+  setAlarm('imb', E.M04.iunb > 6 ? 'warn' : null, `Squilibrio correnti sul quadro Surgelazione: ${fmt(E.M04.iunb, 1)} %`, 'M04 · qualità rete');
+}
+
+/* ================= HELPERS ================= */
+function tween(el, v, d = 0) {
+  if (!el) return; const from = el._v ?? v; el._v = v;
+  if (RM || from === v) { el.textContent = fmt(v, d); return; }
+  const t0 = performance.now(); cancelAnimationFrame(el._r);
+  const step = now => { const k = clamp((now - t0) / 700, 0, 1), e = 1 - Math.pow(1 - k, 3); el.textContent = fmt(from + (v - from) * e, d); if (k < 1) el._r = requestAnimationFrame(step); };
+  el._r = requestAnimationFrame(step);
+}
+const setT = (id, v) => { const e = document.getElementById(id); if (e && e.textContent !== v) e.textContent = v; };
+function spark(svg, data, color, lo, hi) {
+  if (!svg) return; let mn = lo ?? Math.min(...data), mx = hi ?? Math.max(...data); if (mx - mn < 1e-6) { mn -= 1; mx += 1; }
+  const pd = (mx - mn) * .15; mn -= pd; mx += pd;
+  const pts = data.map((v, i) => [i / (data.length - 1) * 100, 28 - (v - mn) / (mx - mn) * 26]);
+  const l = pts.map((p, i) => (i ? 'L' : 'M') + p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join('');
+  svg.setAttribute('viewBox', '0 0 100 30');
+  svg.innerHTML = `<defs><linearGradient id="g${svg.id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:${color};stop-opacity:.32"/><stop offset="1" style="stop-color:${color};stop-opacity:0"/></linearGradient></defs><path d="${l}L100 30L0 30Z" fill="url(#g${svg.id})"/><path d="${l}" fill="none" style="stroke:${color}" stroke-width="1.8" vector-effect="non-scaling-stroke" stroke-linejoin="round"/>`;
+}
+const hhmm = t => { const d = new Date(t); return pad(d.getHours()) + ':' + pad(d.getMinutes()); };
+const tfmt = t => { const d = new Date(t), n = new Date(SIM.t); return d.toDateString() === n.toDateString() ? hhmm(t) + ':' + pad(d.getSeconds()) : d.toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' }) + ' ' + hhmm(t); };
+const dlabel = ds => new Date(ds).toLocaleDateString('it-IT', { weekday: 'short', day: 'numeric' });
+
+/* ================= STACKED LOAD CURVE ================= */
+const vis = new Set([...GROUPS, 'FV', 'ieri']);
+function buildLegend() {
+  $('#stkleg').innerHTML = GROUPS.map(g => `<button class="chipb lg" data-lg="${g}" aria-pressed="${vis.has(g)}" style="--c:var(--s${GIDX[g]})"><i></i>${MBY[g].short}</button>`).join('') +
+    `<button class="chipb lg" data-lg="FV" aria-pressed="${vis.has('FV')}" style="--c:var(--gen)"><i></i>Fotovoltaico</button><button class="chipb lg" data-lg="ieri" aria-pressed="${vis.has('ieri')}" style="--c:var(--faint)"><i></i>Ieri (prelievo)</button>`;
+}
+let stkHover = null;
+function drawStack() {
+  const svg = $('#stack'), W = svg.clientWidth, Ht = svg.clientHeight; if (!W) return;
+  const ds = dayStart(SIM.t), st = today(), n = st.n, ym = stats(ds - DAY);
+  const m = { l: 46, r: 14, t: 12, b: 26 }, iw = W - m.l - m.r, ih = Ht - m.t - m.b, YM = 1200;
+  const X = i => m.l + i / NS * iw, Y = v => m.t + (1 - clamp(v, 0, YM) / YM) * ih;
+  svg.setAttribute('viewBox', `0 0 ${W} ${Ht}`);
+  let s = '';
+  // fasce
+  const FC = { 1: 'var(--accent)', 2: 'var(--flow)', 3: 'var(--faint)' }, FO = { 1: .08, 2: .06, 3: .03 };
+  let a = 0; for (let i = 1; i <= NS; i++) { if (i === NS || fascia(ds + i * SLOT) !== fascia(ds + a * SLOT)) { const f = fascia(ds + a * SLOT); s += `<rect x="${X(a)}" y="${m.t}" width="${X(i) - X(a)}" height="${ih}" fill="${FC[f]}" opacity="${FO[f]}"/>`; if (i - a >= 8) s += `<text class="axis" x="${(X(a) + X(i)) / 2}" y="${m.t + 11}" text-anchor="middle" opacity=".8">F${f}</text>`; a = i; } }
+  for (let k = 0; k <= 6; k++) { const v = k * 200, y = Y(v); s += `<line class="grid" x1="${m.l}" x2="${W - m.r}" y1="${y}" y2="${y}"/><text class="axis" x="${m.l - 8}" y="${y + 4}" text-anchor="end">${v}</text>`; }
+  for (let h = 0; h <= 24; h += (W < 520 ? 6 : 3)) s += `<text class="axis" x="${X(h * 4)}" y="${Ht - 6}" text-anchor="${h === 0 ? 'start' : h === 24 ? 'end' : 'middle'}">${pad(h)}:00</text>`;
+  // stacked areas
+  const idx = Array.from({ length: n }, (_, i) => i), cx = i => m.l + (i + .5) / NS * iw;
+  let cum = new Array(n).fill(0);
+  GROUPS.forEach(g => {
+    if (!vis.has(g)) return;
+    const lo = cum.slice(); cum = cum.map((c, i) => c + st.g[g][i]);
+    if (n < 2) return;
+    const top = idx.map(i => `${i ? 'L' : 'M'}${cx(i).toFixed(1)} ${Y(cum[i]).toFixed(1)}`).join(''), bot = idx.slice().reverse().map(i => `L${cx(i).toFixed(1)} ${Y(lo[i]).toFixed(1)}`).join('');
+    s += `<path d="${top}${bot}Z" fill="var(--s${GIDX[g]})" opacity=".88"/>`;
+  });
+  // forecast baseline
+  if (n < NS) { let d = ''; for (let i = Math.max(n - 1, 0); i < NS; i++) d += `${d ? 'L' : 'M'}${cx(i).toFixed(1)} ${Y(baseImport(ds + i * SLOT + SLOT / 2)).toFixed(1)}`; s += `<path d="${d}" fill="none" stroke="var(--muted)" stroke-width="1.6" stroke-dasharray="2 4" stroke-linecap="round"/>`; }
+  if (vis.has('ieri')) s += `<path d="${Array.from(ym.imp, (v, i) => `${i ? 'L' : 'M'}${cx(i).toFixed(1)} ${Y(v).toFixed(1)}`).join('')}" fill="none" stroke="var(--faint)" stroke-width="1.4" stroke-dasharray="1 3" stroke-linecap="round"/>`;
+  if (vis.has('FV') && n > 1) s += `<path d="${idx.map(i => `${i ? 'L' : 'M'}${cx(i).toFixed(1)} ${Y(st.pv[i]).toFixed(1)}`).join('')}" fill="none" stroke="var(--gen)" stroke-width="2"/>`;
+  if (n > 1) s += `<path d="${idx.map(i => `${i ? 'L' : 'M'}${cx(i).toFixed(1)} ${Y(st.imp[i]).toFixed(1)}`).join('')}" fill="none" stroke="var(--fg)" stroke-width="2.4" stroke-linejoin="round"/>`;
+  const yc = Y(CONTRACT); s += `<line class="lim crit" x1="${m.l}" x2="${W - m.r}" y1="${yc}" y2="${yc}"/><text class="limt crit" x="${W - m.r - 4}" y="${yc - 5}" text-anchor="end">Potenza impegnata ${fmt(CONTRACT)} kW</text>`;
+  const nx = m.l + clamp((SIM.t - ds) / DAY, 0, 1) * iw; s += `<line class="nowl" x1="${nx}" x2="${nx}" y1="${m.t}" y2="${m.t + ih}"/><text class="nowt" x="${nx + 4}" y="${m.t + ih - 6}">${hhmm(SIM.t)}</text>`;
+  const tip = $('#stip');
+  if (stkHover != null && stkHover < n) {
+    const i = stkHover, x = cx(i); s += `<line class="hv" x1="${x}" x2="${x}" y1="${m.t}" y2="${m.t + ih}"/>`;
+    tip.hidden = false; tip.style.left = clamp(x + 12, 0, W - 200) + 'px';
+    tip.innerHTML = `<b>${hhmm(ds + i * SLOT)}–${hhmm(ds + (i + 1) * SLOT)} · fascia F${fascia(ds + i * SLOT)}</b>` + GROUPS.filter(g => vis.has(g)).map(g => `<div><i style="--c:var(--s${GIDX[g]})"></i>${MBY[g].short}<span>${fmt(st.g[g][i])} kW</span></div>`).join('') + `<div><i style="--c:var(--gen)"></i>Fotovoltaico<span>−${fmt(st.pv[i])} kW</span></div><div style="border-top:1px solid var(--line2);margin-top:4px;padding-top:4px"><i style="--c:var(--fg)"></i>Prelievo rete<span>${fmt(st.imp[i])} kW</span></div>`;
+  } else tip.hidden = true;
+  svg.innerHTML = s; svg._g = { m, iw, n };
+}
+function bindStack() {
+  const svg = $('#stack');
+  const mv = e => { const g = svg._g; if (!g) return; const r = svg.getBoundingClientRect(); const i = Math.floor((e.clientX - r.left - g.m.l) / g.iw * NS); stkHover = i >= 0 && i < g.n ? i : null; drawStack(); };
+  svg.addEventListener('pointermove', mv); svg.addEventListener('pointerdown', mv); svg.addEventListener('pointerleave', () => { stkHover = null; drawStack(); });
+  $('#stkleg').addEventListener('click', e => { const b = e.target.closest('[data-lg]'); if (!b) return; const k = b.dataset.lg; vis.has(k) ? vis.delete(k) : vis.add(k); b.setAttribute('aria-pressed', vis.has(k)); drawStack(); });
+}
+
+/* generic line chart */
+function lineChart(svg, o) {
+  const W = svg.clientWidth, Ht = svg.clientHeight; if (!W) return;
+  const m = { l: 46, r: o.rpad ?? 14, t: 12, b: 26 }, iw = W - m.l - m.r, ih = Ht - m.t - m.b, n = o.n;
+  const X = i => m.l + (n > 1 ? i / (n - 1) : 0) * iw, Y = v => m.t + (1 - (clamp(v, o.min, o.max) - o.min) / (o.max - o.min)) * ih;
+  svg.setAttribute('viewBox', `0 0 ${W} ${Ht}`); let s = '';
+  for (let k = 0; k <= 4; k++) { const v = o.min + (o.max - o.min) * k / 4, y = Y(v); s += `<line class="grid" x1="${m.l}" x2="${W - m.r}" y1="${y}" y2="${y}"/><text class="axis" x="${m.l - 8}" y="${y + 4}" text-anchor="end">${fmt(v, o.dec || 0)}</text>`; }
+  (o.xl || []).forEach(([i, t]) => { s += `<text class="axis" x="${X(i)}" y="${Ht - 6}" text-anchor="${i === 0 ? 'start' : i >= n - 1 ? 'end' : 'middle'}">${t}</text>`; });
+  if (o.band) { const up = o.band.hi.map((v, i) => `${i ? 'L' : 'M'}${X(i).toFixed(1)} ${Y(v).toFixed(1)}`).join(''), dn = o.band.lo.map((v, i) => `L${X(i).toFixed(1)} ${Y(v).toFixed(1)}`).reverse().join(''); s += `<path d="${up}${dn}Z" fill="var(--accent)" opacity=".13"/>`; }
+  (o.lines || []).forEach(l => { const y = Y(l.v); s += `<line class="lim ${l.cls}" x1="${m.l}" x2="${W - m.r}" y1="${y}" y2="${y}"/><text class="limt ${l.cls}" x="${W - m.r - 4}" y="${y - 5}" text-anchor="end">${l.t}</text>`; });
+  o.series.forEach(se => {
+    const pts = se.d.map((v, i) => v == null ? null : [X(i), Y(v)]); let d = '', pen = false;
+    pts.forEach(p => { if (!p) { pen = false; return; } d += `${pen ? 'L' : 'M'}${p[0].toFixed(1)} ${p[1].toFixed(1)}`; pen = true; });
+    s += `<path d="${d}" fill="none" stroke="${se.c}" stroke-width="${se.w || 2.2}" ${se.dash ? `stroke-dasharray="${se.dash}"` : ''} stroke-linejoin="round" stroke-linecap="round"/>`;
+    if (se.dots) pts.forEach((p, i) => { if (p) s += `<circle cx="${p[0]}" cy="${p[1]}" r="3.6" fill="${se.bad && se.bad(i) ? 'var(--crit)' : se.c}"/>`; });
+  });
+  (o.marks || []).forEach(i => { s += `<circle cx="${X(i)}" cy="${Y(o.series[0].d[i])}" r="5" fill="none" stroke="var(--crit)" stroke-width="2"/>`; });
+  if (o.now != null) { const x = X(o.now); s += `<line class="nowl" x1="${x}" x2="${x}" y1="${m.t}" y2="${m.t + ih}"/>`; }
+  svg.innerHTML = s;
+}
+
+/* ================= OVERVIEW ================= */
+function drawGauge(p) {
+  const max = 1200, ang = v => Math.PI - clamp(v / max, 0, 1) * Math.PI, pt = (v, r) => [100 + r * Math.cos(ang(v)), 100 - r * Math.sin(ang(v))];
+  const arc = (a, b, r, c, w) => { const [x1, y1] = pt(a, r), [x2, y2] = pt(b, r); return `<path d="M${x1.toFixed(1)} ${y1.toFixed(1)}A${r} ${r} 0 0 1 ${x2.toFixed(1)} ${y2.toFixed(1)}" fill="none" stroke="${c}" stroke-width="${w}" stroke-linecap="butt"/>`; };
+  const rot = -90 + clamp(p / max, 0, 1) * 180;
+  const g = $('#gauge');
+  if (!g._b) { g._b = 1; g.innerHTML = arc(0, 800, 80, 'var(--ok)', 12) + arc(800, 1000, 80, 'var(--warn)', 12) + arc(1000, 1200, 80, 'var(--crit)', 12) +
+    [0, 400, 800, 1000, 1200].map(v => { const [x, y] = pt(v, 100); return `<text x="${x.toFixed(1)}" y="${(y + (v === 0 || v === 1200 ? 12 : 4)).toFixed(1)}" font-size="9" text-anchor="middle" fill="var(--faint)">${v}</text>`; }).join('') +
+    `<g class="needle" id="needle"><path d="M97 100L100 28L103 100Z" fill="var(--fg)"/><circle cx="100" cy="100" r="6" fill="var(--fg)"/></g><text id="gv" x="100" y="128" font-size="26" font-weight="700" text-anchor="middle" fill="var(--fg)" style="font-family:var(--f-display)"></text><text x="100" y="140" font-size="8.5" text-anchor="middle" fill="var(--muted)">kW · impegnata 1.000</text>`; }
+  $('#needle').style.transform = `rotate(${rot}deg)`; $('#gv').textContent = fmt(p);
+}
+function overview(E) {
+  const ds = dayStart(SIM.t), st = today(), ys = stats(ds - DAY), m = E.M01;
+  drawGauge(Math.max(0, m.p));
+  const cur = st.imp[Math.max(0, st.n - 1)], peakNow = st.peak;
+  setT('gs', `media 15' ${fmt(cur)} kW · picco oggi ${fmt(peakNow)} kW alle ${hhmm(ds + st.peakI * SLOT)}`);
+  $('#k-pow').className = 'card kpi gaugek' + (m.p > CONTRACT ? ' crit' : m.p > .93 * CONTRACT ? ' warn' : '');
+  tween($('#v-en'), st.kwh, 0);
+  const yPart = Array.from(ys.imp).reduce((s, v, i) => s + v * .25 * (i < st.n - 1 ? 1 : i === st.n - 1 ? clamp((SIM.t - (ds + i * SLOT)) / SLOT, 0, 1) : 0), 0);
+  const dp = yPart > 1 ? (st.kwh - yPart) / yPart * 100 : 0;
+  $('#s-en').innerHTML = `${fmt(Math.abs(dp), 1)} % <span class="${dp > 0 ? 'up' : 'dn'}">${dp > 0 ? 'in più' : 'in meno'}</span> di ieri alla stessa ora`;
+  spark($('#sp-en'), Array.from(st.imp.slice(0, Math.max(2, st.n))), 'var(--accent)', 0);
+  tween($('#v-cost'), st.cost, 0); setT('s-cost', `${fmt(st.kwh > 1 ? st.cost / st.kwh : 0, 3)} €/kWh medio · F1 ${fmt(st.kF[0])} · F2 ${fmt(st.kF[1])} · F3 ${fmt(st.kF[2])} kWh`);
+  const cs = []; let acc = 0; for (let i = 0; i < Math.max(2, st.n); i++) { acc += st.imp[i] * .25 * PRICE[fascia(ds + i * SLOT)]; cs.push(acc); } spark($('#sp-cost'), cs, 'var(--accent)', 0);
+  tween($('#v-pf'), m.pf, 2); const pf = m.p > 200 ? m.pf : 1;
+  $('#k-pf').className = 'card kpi' + (pf < .85 ? ' crit' : pf < .93 ? ' warn' : ''); setT('pfp', pf < .9 ? 'sotto soglia' : pf < .95 ? 'da migliorare' : 'ottimo');
+  setT('s-pf', `reattiva oggi ${fmt(st.kvarh)} kVArh · soglia penale 0,95`);
+  const pfs = [], N6 = Math.max(2, st.n); for (let i = Math.max(0, N6 - 24); i < N6; i++) pfs.push(0.9); spark($('#sp-pf'), pfHist(24), 'var(--l2)', .7, 1);
+  tween($('#v-pv'), E.M09.p, 0); setT('s-pv', `${fmt(st.pvk)} kWh oggi · copre il ${fmt(st.cons > 1 ? st.pvk / st.cons * 100 : 0, 1)} % dei consumi`); spark($('#sp-pv'), Array.from(st.pv.slice(0, Math.max(2, st.n))), 'var(--gen)', 0);
+  const ik = st.tons > .5 ? st.cons / st.tons : 0; tween($('#v-int'), ik, 0); setT('s-int', `${fmt(st.tons, 1)} t prodotte oggi · obiettivo 270 kWh/t`);
+  const hist = daysBack(14).map(d => { if (d === ds) return ik || null; const s = stats(d); return s.tons > 1 ? s.cons / s.tons : null; }); spark($('#sp-int'), hist.map(v => v ?? 270), 'var(--accent)', 150, 450);
+  // split
+  const tot = GROUPS.reduce((s, g) => s + st.grp[g], 0) || 1; const mx = Math.max(...GROUPS.map(g => st.grp[g])) || 1;
+  const sorted = GROUPS.slice().sort((a, b) => st.grp[b] - st.grp[a]);
+  setT('splitt', `${fmt(tot)} kWh consumati`);
+  const box = $('#split'); if (box._o !== sorted.join()) { box._o = sorted.join(); box.innerHTML = sorted.map(g => `<div class="bar" style="--c:var(--s${GIDX[g]})" data-g="${g}"><span class="n"><i></i>${MBY[g].name}</span><span class="v"></span><span class="t"><u></u></span></div>`).join(''); }
+  sorted.forEach(g => { const r = box.querySelector(`[data-g="${g}"]`); r.querySelector('.v').textContent = `${fmt(st.grp[g])} kWh · ${fmt(st.grp[g] / tot * 100, 1)} %`; r.querySelector('u').style.width = (st.grp[g] / mx * 100) + '%'; });
+}
+const pfH = []; function pfHist(n) { return pfH.slice(-n).length > 1 ? pfH.slice(-n) : [.95, .95]; }
+
+/* insights computed from the data */
+function insights(E) {
+  const ds = dayStart(SIM.t), st = today(), out = [];
+  const wk = daysBack(8).slice(0, 7).filter(d => dow(d) >= 1 && dow(d) <= 5);
+  const night = wk.length ? wk.reduce((s, d) => { const a = stats(d).imp; let x = 0; for (let i = 4; i < 16; i++) x += a[i]; return s + x / 12; }, 0) / wk.length : 0;
+  const nightLoad = Math.max(0, night - 110), nightSave = nightLoad * 8 * 260 * PRICE[3];
+  out.push({ s: 'warn', ic: 'N', t: `Carico base notturno di ${fmt(night)} kW`, p: `Tra 01:00 e 04:00, a linee ferme, il prelievo resta alto: celle, compressori e ventilazione forni restano in marcia. Un obiettivo di 110 kW lo ridurrebbe di ${fmt(nightLoad)} kW.`, g: `risparmio stimato ${fmt(nightSave / 1000, 1)} k€/anno` });
+  const mtd = monthToDate().reduce((a, d) => { const s = stats(d); a.k += s.kwh; a.r += s.kvarh; a.x += s.kvarhExcess; return a; }, { k: 0, r: 0, x: 0 });
+  const tphi = mtd.r / (mtd.k || 1), cosm = Math.cos(Math.atan(tphi));
+  out.push({ s: cosm < .95 ? 'warn' : 'ok', ic: 'φ', t: `Cosφ medio del mese ${fmt(cosm, 3)}`, p: cosm < .95 ? `La reattiva supera il 33 % dell'attiva nelle fasce F1/F2. I quadri Surgelazione e Frigo hanno cosφ più basso: conviene verificare la batteria di rifasamento.` : 'Il rifasamento mantiene il cosφ sopra la soglia di 0,95 nelle fasce a pagamento.', g: `penale stimata del mese ${fmt(mtd.x * PEN_RATE, 0)} €` });
+  const top = GROUPS.slice().sort((a, b) => st.g[b][st.peakI] - st.g[a][st.peakI]).slice(0, 2);
+  out.push({ s: st.peak > CONTRACT ? 'crit' : st.peak > .9 * CONTRACT ? 'warn' : 'ok', ic: 'P', t: `Picco 15' di ${fmt(st.peak)} kW alle ${hhmm(ds + st.peakI * SLOT)}`, p: `Il picco coincide con ${MBY[top[0]].short.toLowerCase()} (${fmt(st.g[top[0]][st.peakI])} kW) e ${MBY[top[1]].short.toLowerCase()} (${fmt(st.g[top[1]][st.peakI])} kW). Sfalsare di 30 minuti gli avviamenti dei cicli di surgelazione abbassa il picco.`, g: `margine sulla potenza impegnata ${fmt(CONTRACT - st.peak)} kW` });
+  const act = A.filter(a => a.active && a.id.startsWith('dev')); if (act.length) out.unshift({ s: 'warn', ic: '!', t: `Scostamento dalla baseline su ${act.length} ${act.length === 1 ? 'reparto' : 'reparti'}`, p: act.map(a => a.text).join(' · '), g: 'confronto con il profilo atteso per ora e giorno' });
+  const ik = st.tons > .5 ? st.cons / st.tons : null, hs = daysBack(11).slice(0, 10).map(d => stats(d)).filter(s => s.tons > 5).map(s => s.cons / s.tons), avg = hs.length ? hs.reduce((a, b) => a + b, 0) / hs.length : 0;
+  if (ik && avg) out.push({ s: ik > avg * 1.1 ? 'warn' : 'ok', ic: 't', t: `${fmt(ik)} kWh/t contro ${fmt(avg)} kWh/t degli ultimi giorni`, p: ik > avg * 1.1 ? 'Oggi si consuma più energia per tonnellata di basi pizza prodotte. Con la produzione ancora in salita è normale al mattino, da ricontrollare a fine turno.' : 'L\'intensità energetica è in linea con la media recente.', g: 'dato produzione simulato (MES)' });
+  return out.slice(0, 5);
+}
+function renderInsights(E) { $('#ins').innerHTML = insights(E).map(i => `<div class="insight ${i.s}"><div class="ic">${i.ic}</div><div><b>${i.t}</b><p>${i.p}</p><span class="gain">${i.g}</span></div></div>`).join(''); }
+
+/* ================= UNIFILARE ================= */
+const FEED = { M02: [105, 'A'], M03: [230, 'A'], M04: [355, 'A'], M10: [480, 'A'], M05: [650, 'B'], M06: [776, 'B'], M07: [902, 'B'], M08: [1028, 'B'], M09: [1154, 'B'] };
+function buildUL() {
+  let s = '';
+  const wire = (d, w = 3) => `<path class="wire" d="${d}" stroke-width="${w}"/>`, fl = (id, d, cls = '') => `<path class="fl ${cls}" id="fl-${id}" d="${d}" stroke-width="4"/>`;
+  // grid
+  s += `<g><circle class="gridsym" cx="567" cy="38" r="20"/><path class="gridsym" d="M557 38q5-9 10 0t10 0"/><text class="t" x="600" y="34">RETE MT 15 kV</text><text class="s" x="600" y="50">fornitura in media tensione</text></g>`;
+  s += wire('M567 58V90') + wire('M567 148V190') + wire('M293 190H840') + wire('M293 190V228') + wire('M840 190V228') + wire('M293 292V340') + wire('M840 292V340');
+  s += fl('mt', 'M567 58V90') + fl('mt2', 'M567 148V190') + fl('ma', 'M567 190H293V228') + fl('mb', 'M567 190H840V228');
+  // trasformatori
+  [[293, 'TR1', 'Trasformatore 1000 kVA', 0], [840, 'TR2', 'Trasformatore 630 kVA', 1]].forEach(([x, n, l, k]) => {
+    s += `<g class="tr"><circle cx="${x}" cy="246" r="19"/><circle cx="${x}" cy="270" r="19"/></g><text class="t" x="${x + 34}" y="244">${n} · ${k ? '630' : '1000'} kVA</text><rect class="trb" x="${x + 34}" y="252" width="110" height="8" rx="4"/><rect class="trf" id="trf${k}" x="${x + 34}" y="252" width="0" height="8" rx="4"/><text class="s" id="trt${k}" x="${x + 34}" y="278"></text>`;
+    s += fl('t' + k, `M${x} 292V340`);
+  });
+  // buses
+  s += wire('M70 340H520', 6) + wire('M610 340H1190', 6) + fl('ba1', 'M293 340H70') + fl('ba2', 'M293 340H520') + fl('bb1', 'M840 340H610') + fl('bb2', 'M840 340H1190');
+  s += `<text class="t" x="70" y="324">QGBT-A · CABINA 1</text><text class="t" x="610" y="324">QGBT-B · CABINA 2</text>`;
+  // M01 badge
+  const bdg = (id, x, y) => { const m = MBY[id]; return `<g class="eq bdg" data-m="${id}" tabindex="0" role="button" aria-label="${m.name}" transform="translate(${x - 59} ${y})"><rect class="bx" width="118" height="60" rx="10"/><text class="id" x="9" y="16">${id} · ${m.model}</text><text class="nm" x="9" y="32">${m.short}</text><text class="kw" x="9" y="53" id="ukw-${id}">--</text><text class="pf" x="110" y="53" text-anchor="end" id="upf-${id}"></text></g>`; };
+  s += bdg('M01', 567, 88);
+  Object.entries(FEED).forEach(([id, [x]]) => {
+    const gen = id === 'M09';
+    s += wire(`M${x} 340V400`) + wire(`M${x} 458V510`) + fl('a' + id, gen ? `M${x} 340V400` : `M${x} 340V400`, gen ? 'gen' : '') + fl('b' + id, `M${x} 458V510`, gen ? 'gen' : '');
+    s += bdg(id, x, 400);
+    s += `<g style="--c:${gen ? 'var(--gen)' : `var(--s${GIDX[id]})`};--sp:4s"><circle class="core" cx="${x}" cy="534" r="22"/><circle class="ring" id="ring-${id}" cx="${x}" cy="534" r="22"/>${gen ? `<g stroke="var(--gen)" stroke-width="2" stroke-linecap="round"><circle cx="${x}" cy="534" r="6" fill="none"/><path d="M${x} 522v-4M${x} 546v4M${x - 12} 534h-4M${x + 12} 534h4M${x - 8} 526l-3-3M${x + 8} 542l3 3M${x - 8} 542l-3 3M${x + 8} 526l3-3"/></g>` : `<text x="${x}" y="539" text-anchor="middle" font-size="14" font-weight="600" fill="var(--fg)" style="font-family:var(--f-display)">M</text>`}</g>`;
+    s += `<text class="s" x="${x}" y="580" text-anchor="middle">${id === 'M09' ? 'Inverter FV' : MBY[id].loc.split('·')[0].trim()}</text>`;
+  });
+  s += `<text class="s" x="70" y="624">I flussi animati sono proporzionali alla potenza letta dai power meter. Dati simulati.</text>`;
+  $('#ul').innerHTML = s;
+}
+function updateUL(E) {
+  const sw = p => 2 + clamp(p / 220, 0, 1) * 4.5;
+  const setfl = (id, p, on = true) => { const e = document.getElementById('fl-' + id); if (!e) return; e.classList.toggle('off', !(on && p > 3)); e.setAttribute('stroke-width', sw(p).toFixed(1)); e.style.animationDuration = clamp(1.6 - p / 500, .45, 1.6) + 's'; };
+  const t = SIM.t, offM06 = scOn('comm', t);
+  const PA = GROUPS.filter(g => FEED[g][1] === 'A').reduce((s, g) => s + E[g].p, 0), PB = GROUPS.filter(g => FEED[g][1] === 'B').reduce((s, g) => s + E[g].p, 0);
+  const SA = GROUPS.filter(g => FEED[g][1] === 'A').reduce((s, g) => s + E[g].s, 0), SB = GROUPS.filter(g => FEED[g][1] === 'B').reduce((s, g) => s + E[g].s, 0) - 0;
+  const imp = Math.max(0, E.M01.p);
+  ['mt', 'mt2'].forEach(k => setfl(k, imp)); setfl('ma', PA); setfl('mb', PB);
+  setfl('t0', PA); setfl('t1', PB); setfl('ba1', PA * .5); setfl('ba2', PA * .5); setfl('bb1', PB * .5 + E.M09.p * .2); setfl('bb2', PB * .5);
+  Object.keys(FEED).forEach(id => { const p = E[id].p; setfl('a' + id, p); setfl('b' + id, p); const r = document.getElementById('ring-' + id); const off = id === 'M06' && offM06; r.classList.toggle('off', off || p < 3); r.style.setProperty('--sp', clamp(7 - p / 25, 1.1, 7) + 's'); });
+  [[0, SA, TRAFO[0]], [1, SB, TRAFO[1]]].forEach(([k, s, r]) => { const pc = s / r; document.getElementById('trf' + k).setAttribute('width', 110 * clamp(pc, 0, 1)); setT('trt' + k, `${fmt(s)} kVA · ${fmt(pc * 100)} %`); });
+  ['M01', ...Object.keys(FEED)].forEach(id => {
+    const g = $(`.eq[data-m="${id}"]`, $('#ul')); if (!g) return; const off = id === 'M06' && offM06, e = E[id];
+    setT('ukw-' + id, off ? 'offline' : fmt(Math.abs(e.p)) + ' kW'); setT('upf-' + id, off ? '' : 'φ ' + fmt(e.pf, 2));
+    g.classList.toggle('off', off); const crit = (id === 'M01' && e.p > CONTRACT) || off, warn = !crit && ((id === 'M01' && e.p > .93 * CONTRACT) || A.some(a => a.active && a.tag.startsWith(id)));
+    g.classList.toggle('crit', crit); g.classList.toggle('warn', warn);
+  });
+}
+
+/* ================= DRAWER (meter detail) ================= */
+let openId = null;
+function openMeter(id) {
+  openId = id; const m = MBY[id];
+  $('#drawer').innerHTML = `<div class="dr-h"><div><span class="eyebrow mono">${id} · ${m.model} · ${m.ip} · unit ${m.unit}</span><h3>${m.name}</h3><div style="margin-top:8px"><span class="pill ok" id="dr-st">Online</span></div></div><button class="xbtn" id="dr-x" aria-label="Chiudi">×</button></div><div class="dr-b" id="dr-b"></div>`;
+  $('#drawer').classList.add('on'); $('#scrim').classList.add('on'); $('#dr-x').onclick = closeDrawer; $('#dr-x').focus(); updateDrawer(lastE);
+}
+function closeDrawer() { openId = null; $('#drawer').classList.remove('on'); $('#scrim').classList.remove('on'); }
+function updateDrawer(E) {
+  if (!openId || !E) return; const id = openId, e = E[id], m = MBY[id], off = id === 'M06' && scOn('comm', SIM.t);
+  const ds = dayStart(SIM.t), st = today(), kwhT = id === 'M01' ? st.kwh : id === 'M09' ? st.pvk : st.grp[id];
+  const mtd = monthToDate().reduce((s, d) => { const x = stats(d); return s + (id === 'M01' ? x.kwh : id === 'M09' ? x.pvk : x.grp[id]); }, 0);
+  const p = $('#dr-st'); p.className = 'pill ' + (off ? 'crit' : 'ok'); p.textContent = off ? 'Timeout Modbus' : 'Online';
+  const series = id === 'M01' ? st.imp : id === 'M09' ? st.pv : st.g[id], arr = Array.from(series.slice(0, Math.max(2, st.n)));
+  const ph = (lab, vals, unit, max, dec) => vals.map((v, i) => `<div class="ph" style="--c:var(--l${i + 1})"><span>${lab}${i + 1}</span><span class="t"><u style="width:${clamp(v / max * 100, 0, 100)}%"></u></span><span>${fmt(v, dec)} ${unit}</span></div>`).join('');
+  const imax = Math.max(...e.i) * 1.25 || 1;
+  $('#dr-b').innerHTML = `<div class="mets"><div class="met"><small>Potenza attiva</small><b class="num">${id === 'M09' ? '−' : ''}${fmt(Math.abs(e.p), 1)}</b><span>kW</span></div><div class="met"><small>Reattiva</small><b class="num">${fmt(e.q, 1)}</b><span>kVAr</span></div><div class="met"><small>Apparente</small><b class="num">${fmt(e.s, 1)}</b><span>kVA</span></div><div class="met"><small>Cosφ</small><b class="num">${fmt(e.pf, 3)}</b></div><div class="met"><small>Frequenza</small><b class="num">${fmt(e.f, 2)}</b><span>Hz</span></div><div class="met"><small>THD corrente</small><b class="num">${fmt(e.thd, 1)}</b><span>%</span></div></div>
+  <div><div class="eyebrow" style="margin-bottom:8px">Correnti di fase</div><div class="phs">${ph('L', e.i, 'A', imax, 0)}</div><p class="note" style="margin-top:6px">Squilibrio ${fmt(e.iunb ?? 0, 1)} %</p></div>
+  <div><div class="eyebrow" style="margin-bottom:8px">Tensioni di fase</div><div class="phs">${ph('L', e.v, 'V', 260, 1)}</div></div>
+  <div><div class="eyebrow" style="margin-bottom:6px">Potenza di oggi</div><svg class="sp" id="dr-sp" style="height:80px" preserveAspectRatio="none"></svg></div>
+  <div class="stat3"><div class="met"><small>Energia oggi</small><b class="num">${fmt(kwhT)}</b><span>kWh</span></div><div class="met"><small>Mese corrente</small><b class="num">${fmt(mtd)}</b><span>kWh</span></div><div class="met"><small>Contatore</small><b class="num">${fmt((1.2e6 + mtd) / 1000, 1)}</b><span>MWh</span></div></div>
+  <button class="btn" data-go="modbus" style="align-self:flex-start">Vedi i registri Modbus</button>`;
+  spark($('#dr-sp'), arr, 'var(--accent)', 0);
+}
+
+/* ================= ANALISI ================= */
+const ATABS = [['fasce', 'Fasce e costi'], ['int', 'Intensità energetica'], ['base', 'Baseline e anomalie'], ['pq', 'Qualità della rete']];
+let atab = 'fasce', pqId = 'M01';
+function buildAnalisi() {
+  $('#atabs').innerHTML = ATABS.map(([k, l]) => `<button class="chipb" data-at="${k}" aria-pressed="${k === atab}">${l}</button>`).join('');
+  $('#a-fasce').innerHTML = `<div class="stat3" style="grid-template-columns:repeat(4,minmax(0,1fr))" id="fs"></div><div class="gridh"><div class="card"><div class="card-h"><h2>Energia per fascia · ultimi 7 giorni</h2><span class="eyebrow">kWh prelevati</span></div><svg class="chart sm" id="fbar"></svg><div class="legend" style="margin-top:8px"><span class="chipb lg" style="--c:var(--accent)"><i></i>F1</span><span class="chipb lg" style="--c:var(--flow)"><i></i>F2</span><span class="chipb lg" style="--c:var(--faint)"><i></i>F3</span></div></div><div class="card"><div class="card-h"><h2>Costo per reparto · mese corrente</h2><span class="eyebrow">stima con tariffe di esempio</span></div><div class="tw"><table><thead><tr><th>Reparto</th><th>kWh</th><th>€</th><th>Quota</th></tr></thead><tbody id="ctb"></tbody></table></div></div></div>`;
+  $('#a-int').innerHTML = `<div class="gridh"><div class="card"><div class="card-h"><h2>kWh per tonnellata · ultimi 14 giorni</h2><span class="eyebrow">obiettivo 270</span></div><div class="chart-wrap"><svg class="chart sm" id="ichart"></svg></div></div><div class="card"><div class="card-h"><h2>Intensità per reparto · oggi</h2><span class="eyebrow">kWh/t prodotta</span></div><div class="bars" id="ibars"></div></div></div><div class="card"><div class="card-h"><h2>Perché il weekend costa di più per tonnellata</h2></div><p class="note" style="font-size:13px;color:var(--muted)">Il sabato si produce per metà turno ma celle frigorifere, ventilazione dei forni e servizi restano in marcia. Il carico fisso si divide su meno tonnellate e l'indice sale. I giorni marcati in rosso superano l'obiettivo di oltre il 15 %.</p></div>`;
+  $('#a-base').innerHTML = `<div class="card"><div class="card-h"><h2>Profilo di oggi contro baseline</h2><span class="eyebrow">fascia ±6 % · i cerchi rossi segnalano scostamenti</span></div><div class="chart-wrap"><svg class="chart" id="bchart"></svg></div></div><div class="card"><div class="card-h"><h2>Mappa oraria del prelievo · ultimi 7 giorni</h2><span class="eyebrow">kW medi per ora</span></div><svg class="hm" id="hm" viewBox="0 0 760 230"></svg><div class="hmleg"><span>0</span><u></u><span>900 kW</span></div></div>`;
+  $('#a-pq').innerHTML = `<div class="chips" id="pqsel" role="group" aria-label="Misuratore"></div><div class="gridh"><div class="card"><div class="card-h"><h2>Correnti trifase</h2><span class="eyebrow" id="pqinfo"></span></div><canvas class="scope" id="scope"></canvas><p class="note" style="margin-top:8px">La forma d'onda si deforma con la distorsione armonica misurata dal power meter.</p></div><div class="card"><div class="card-h"><h2>Spettro armonico della corrente</h2><span class="eyebrow">% della fondamentale</span></div><svg class="chart sm" id="harm"></svg></div></div><div class="card"><div class="card-h"><h2>Qualità della rete per quadro</h2></div><div class="tw"><table><thead><tr><th>Misuratore</th><th>Cosφ</th><th>THD I</th><th>Squilibrio tensione</th><th>Squilibrio corrente</th><th>Frequenza</th><th>Stato</th></tr></thead><tbody id="pqt"></tbody></table></div></div>`;
+  $('#pqsel').innerHTML = MT.map(m => `<button class="chipb" data-pq="${m.id}" aria-pressed="${m.id === pqId}">${m.id} ${m.short}</button>`).join('');
+}
+function showATab() { ['fasce', 'int', 'base', 'pq'].forEach(k => $('#a-' + k).hidden = k !== atab); $$('#atabs .chipb').forEach(b => b.setAttribute('aria-pressed', b.dataset.at === atab)); renderAnalisi(lastE); }
+function renderAnalisi(E) {
+  if (page !== 'analisi' || !E) return; const ds = dayStart(SIM.t), st = today();
+  if (atab === 'fasce') {
+    const mt = monthToDate().map(stats), kF = [0, 1, 2].map(i => mt.reduce((s, x) => s + x.kF[i], 0)), kwh = kF[0] + kF[1] + kF[2], cost = kF[0] * PRICE[1] + kF[1] * PRICE[2] + kF[2] * PRICE[3], excess = mt.reduce((s, x) => s + x.kvarhExcess, 0), pen = excess * PEN_RATE;
+    const pk = Math.max(...mt.map(x => x.peak)), days = mt.length, dim = new Date(new Date(SIM.t).getFullYear(), new Date(SIM.t).getMonth() + 1, 0).getDate();
+    $('#fs').innerHTML = [['Energia del mese', fmt(kwh), 'kWh', `previsione a fine mese ${fmt(kwh / days * dim / 1000, 0)} MWh`], ['Costo energia', fmt(cost), '€', `${fmt(cost / kwh, 3)} €/kWh medio`], ['Picco 15\' del mese', fmt(pk), 'kW', `${fmt(pk / CONTRACT * 100)} % della potenza impegnata`], ['Penale reattiva stimata', fmt(pen), '€', `${fmt(excess)} kVArh oltre soglia`]].map(([l, v, u, s]) => `<div class="met"><small>${l}</small><b class="num">${v}</b><span>${u}</span><small style="margin:6px 0 0">${s}</small></div>`).join('');
+    const d7 = daysBack(7).map(d => ({ d, s: stats(d) })), mx = Math.max(...d7.map(x => x.s.kF[0] + x.s.kF[1] + x.s.kF[2]), 1), svg = $('#fbar'), W = svg.clientWidth, Ht = svg.clientHeight;
+    if (W) { const m = { l: 46, r: 8, t: 10, b: 26 }, iw = W - m.l - m.r, ih = Ht - m.t - m.b, bw = iw / 7 * .56; let s = ''; const top = Math.ceil(mx / 2000) * 2000;
+      for (let k = 0; k <= 4; k++) { const v = top * k / 4, y = m.t + (1 - v / top) * ih; s += `<line class="grid" x1="${m.l}" x2="${W - m.r}" y1="${y}" y2="${y}"/><text class="axis" x="${m.l - 8}" y="${y + 4}" text-anchor="end">${fmt(v / 1000, 1)}k</text>`; }
+      d7.forEach((x, i) => { const cx = m.l + (i + .5) / 7 * iw; let y0 = m.t + ih; ['var(--accent)', 'var(--flow)', 'var(--faint)'].forEach((c, f) => { const h = x.s.kF[f] / top * ih; y0 -= h; s += `<rect x="${cx - bw / 2}" y="${y0}" width="${bw}" height="${Math.max(0, h)}" fill="${c}" opacity=".9" rx="2"/>`; }); s += `<text class="axis" x="${cx}" y="${Ht - 6}" text-anchor="middle">${dlabel(x.d).replace('.', '')}</text>`; });
+      svg.setAttribute('viewBox', `0 0 ${W} ${Ht}`); svg.innerHTML = s; }
+    const tg = GROUPS.reduce((s, g) => s + mt.reduce((a, x) => a + x.grp[g], 0), 0) || 1;
+    $('#ctb').innerHTML = GROUPS.map(g => { const k = mt.reduce((a, x) => a + x.grp[g], 0); return { g, k }; }).sort((a, b) => b.k - a.k).map(({ g, k }) => `<tr><td><span style="display:inline-block;width:9px;height:9px;border-radius:3px;background:var(--s${GIDX[g]});margin-right:8px"></span>${MBY[g].short}</td><td class="num">${fmt(k)}</td><td class="num">${fmt(k * cost / kwh)}</td><td class="num">${fmt(k / tg * 100, 1)} %</td></tr>`).join('');
+  }
+  if (atab === 'int') {
+    const d14 = daysBack(14), iv = d14.map(d => { const s = stats(d); return s.tons > 5 ? s.cons / s.tons : null; });
+    lineChart($('#ichart'), { n: 14, min: 150, max: 450, series: [{ d: iv, c: 'var(--accent)', dots: true, bad: i => iv[i] > 310 }], lines: [{ v: 270, t: 'Obiettivo 270', cls: 'ok' }], xl: [[0, dlabel(d14[0]).replace('.', '')], [4, dlabel(d14[4]).replace('.', '')], [9, dlabel(d14[9]).replace('.', '')], [13, 'oggi']], rpad: 14 });
+    const mx = Math.max(...GROUPS.map(g => st.grp[g])) / (st.tons || 1) || 1;
+    $('#ibars').innerHTML = GROUPS.slice().sort((a, b) => st.grp[b] - st.grp[a]).map(g => { const v = st.tons > .5 ? st.grp[g] / st.tons : 0; return `<div class="bar" style="--c:var(--s${GIDX[g]})"><span class="n"><i></i>${MBY[g].short}</span><span class="v">${fmt(v)} kWh/t</span><span class="t"><u style="width:${v / mx * 100}%"></u></span></div>`; }).join('');
+  }
+  if (atab === 'base') {
+    const n = st.n, act = Array.from({ length: NS }, (_, i) => i < n ? st.imp[i] : null), raw = Array.from({ length: NS }, (_, i) => baseImport(ds + i * SLOT + SLOT / 2)), bs = raw.map((_, i) => { const tc = ds + i * SLOT; if (Math.abs(runF(tc + 3 * SLOT) - runF(tc - 3 * SLOT)) > .02) return raw[i]; let a = 0, c = 0; for (let k = -3; k <= 3; k++) { const j = i + k; if (j >= 0 && j < NS) { a += raw[j]; c++; } } return a / c; });
+    const marks = []; for (let i = 0; i < n; i++) if (Math.abs(act[i] - bs[i]) > Math.max(40, .07 * bs[i])) marks.push(i);
+    lineChart($('#bchart'), { n: NS, min: 0, max: 1200, series: [{ d: bs, c: 'var(--muted)', w: 1.5, dash: '2 4' }, { d: act, c: 'var(--accent)' }], band: { lo: bs.map(v => v * .94), hi: bs.map(v => v * 1.06) }, lines: [{ v: CONTRACT, t: 'Impegnata', cls: 'crit' }], xl: [0, 3, 6, 9, 12, 15, 18, 21, 24].map(h => [Math.min(h * 4, NS - 1), pad(h) + ':00']), now: Math.min(NS - 1, st.n) });
+    // marks need correct series index: draw manually
+    const svg = $('#bchart'), W = svg.clientWidth, Ht = svg.clientHeight, mm = { l: 46, r: 14, t: 12, b: 26 }; let extra = ''; marks.slice(0, 40).forEach(i => { extra += `<circle cx="${mm.l + i / (NS - 1) * (W - mm.l - mm.r)}" cy="${mm.t + (1 - clamp(act[i], 0, 1200) / 1200) * (Ht - mm.t - mm.b)}" r="4.5" fill="none" stroke="var(--crit)" stroke-width="2"/>`; }); svg.insertAdjacentHTML('beforeend', extra);
+    const hm = $('#hm'), days = daysBack(7); let s = '';
+    days.forEach((d, r) => { const a = stats(d).imp, isT = d === ds; s += `<text x="0" y="${r * 30 + 22}">${dlabel(d).replace('.', '')}</text>`; for (let h = 0; h < 24; h++) { const lim = isT ? Math.floor(Math.max(0, (SIM.t - ds)) / 36e5) : 24; if (h > lim) { s += `<rect x="${50 + h * 29}" y="${r * 30 + 4}" width="26" height="24" rx="4" fill="var(--surface2)" opacity=".35"/>`; continue; } const v = (a[h * 4] + a[h * 4 + 1] + a[h * 4 + 2] + a[h * 4 + 3]) / 4, k = clamp(v / 900, 0, 1); s += `<rect x="${50 + h * 29}" y="${r * 30 + 4}" width="26" height="24" rx="4" style="fill:color-mix(in srgb,var(--accent) ${Math.round(k * 100)}%,var(--surface2))"><title>${dlabel(d)} ${pad(h)}:00 · ${fmt(v)} kW</title></rect>`; } });
+    for (let h = 0; h < 24; h += 3) s += `<text x="${50 + h * 29 + 13}" y="226" text-anchor="middle">${pad(h)}</text>`; hm.innerHTML = s;
+  }
+  if (atab === 'pq') {
+    $('#pqt').innerHTML = MT.map(m => { const e = E[m.id], ok = e.thd < 15 && (e.vunb < 1.5) && e.pf > .9 && (e.iunb || 0) < 6, w = !ok && (e.thd < 20 && (e.iunb || 0) < 10 && e.pf > .85); return `<tr class="clk" data-pq="${m.id}"><td>${m.id} · ${m.short}</td><td class="num">${fmt(e.pf, 2)}</td><td class="num">${fmt(e.thd, 1)} %</td><td class="num">${fmt(e.vunb, 2)} %</td><td class="num">${fmt(e.iunb || 0, 1)} %</td><td class="num">${fmt(e.f, 2)} Hz</td><td><span class="pill ${ok ? 'ok' : w ? 'warn' : 'crit'}">${ok ? 'Regolare' : w ? 'Da tenere d\'occhio' : 'Fuori soglia'}</span></td></tr>`; }).join('');
+    const e = E[pqId]; setT('pqinfo', `${pqId} · THD ${fmt(e.thd, 1)} %`);
+    const hs = [5, 7, 11, 13, 17, 19, 23, 25], w = [1, .7, .45, .36, .22, .18, .1, .08], k = e.thd / Math.sqrt(w.reduce((s, x) => s + x * x, 0)), svg = $('#harm'), W = svg.clientWidth, Ht = svg.clientHeight;
+    if (W) { const m = { l: 40, r: 10, t: 14, b: 26 }, iw = W - m.l - m.r, ih = Ht - m.t - m.b, mx = 24, Y = v => m.t + (1 - clamp(v, 0, mx) / mx) * ih; let s = '';
+      for (let q = 0; q <= 4; q++) { const v = mx * q / 4; s += `<line class="grid" x1="${m.l}" x2="${W - m.r}" y1="${Y(v)}" y2="${Y(v)}"/><text class="axis" x="${m.l - 8}" y="${Y(v) + 4}" text-anchor="end">${v}</text>`; }
+      hs.forEach((h, i) => { const v = w[i] * k, cx = m.l + (i + .5) / hs.length * iw, bw = iw / hs.length * .55; s += `<rect x="${cx - bw / 2}" y="${Y(v)}" width="${bw}" height="${m.t + ih - Y(v)}" rx="3" fill="${v > 8 ? 'var(--crit)' : 'var(--accent)'}" opacity=".9"/><text class="axis" x="${cx}" y="${Ht - 6}" text-anchor="middle">H${h}</text><text class="axis" x="${cx}" y="${Y(v) - 5}" text-anchor="middle">${fmt(v, 1)}</text>`; });
+      s += `<line class="lim crit" x1="${m.l}" x2="${W - m.r}" y1="${Y(8)}" y2="${Y(8)}"/><text class="limt crit" x="${W - m.r - 4}" y="${Y(8) - 5}" text-anchor="end">limite 8 %</text>`; svg.setAttribute('viewBox', `0 0 ${W} ${Ht}`); svg.innerHTML = s; }
+  }
+}
+/* scope animation */
+let scopeRun = false;
+function scopeLoop(now) {
+  if (!(page === 'analisi' && atab === 'pq')) { scopeRun = false; return; }
+  const cv = $('#scope'), dpr = window.devicePixelRatio || 1, W = cv.clientWidth, Ht = cv.clientHeight; if (!W) { requestAnimationFrame(scopeLoop); return; }
+  if (cv.width !== Math.round(W * dpr)) { cv.width = Math.round(W * dpr); cv.height = Math.round(Ht * dpr); }
+  const c = cv.getContext('2d'); c.setTransform(dpr, 0, 0, dpr, 0, 0); c.clearRect(0, 0, W, Ht);
+  const cs = getComputedStyle(document.documentElement), col = ['--l1', '--l2', '--l3'].map(k => cs.getPropertyValue(k).trim()), line = cs.getPropertyValue('--line').trim();
+  c.strokeStyle = line; c.lineWidth = 1; for (let i = 1; i < 4; i++) { c.beginPath(); c.moveTo(0, Ht * i / 4); c.lineTo(W, Ht * i / 4); c.stroke(); }
+  const e = lastE && lastE[pqId], thd = (e ? e.thd : 6) / 100, tt = now / 1000; if (!e) { requestAnimationFrame(scopeLoop); return; }
+  for (let ph = 0; ph < 3; ph++) { c.beginPath(); c.strokeStyle = col[ph]; c.lineWidth = 2; const amp = Ht * .36 * (e.i[ph] / ((e.i[0] + e.i[1] + e.i[2]) / 3 || 1));
+    for (let x = 0; x <= W; x += 2) { const th = (x / W) * 4 * Math.PI * 2 - tt * 2.2 - ph * 2 * Math.PI / 3; const y = Math.sin(th) + thd * (.7 * Math.sin(5 * th + .6) + .5 * Math.sin(7 * th + 1.1) + .25 * Math.sin(11 * th)) * 2.2; const Y = Ht / 2 - y * amp * .85; x ? c.lineTo(x, Y) : c.moveTo(x, Y); } c.stroke(); }
+  requestAnimationFrame(scopeLoop);
+}
+function startScope() { if (!scopeRun && !RM) { scopeRun = true; requestAnimationFrame(scopeLoop); } else if (RM) { scopeRun = false; requestAnimationFrame(scopeLoop); } }
+
+/* ================= MODBUS ================= */
+const MB = {}; MT.forEach(m => MB[m.id] = { lat: m.via.startsWith('Gateway') ? 62 : 11, err: 0, ok: 0, last: SIM.t, q: 99.6, stale: null });
+let mbSel = 'M01', mbRR = 0, tid = 40, mbLog = [];
+const hex = (n, w = 2) => n.toString(16).toUpperCase().padStart(w, '0'), hx = a => a.map(b => hex(b)).join(' ');
+const BLOCKS = [
+  { n: 'Correnti', a: 3000, q: 12, ms: '1 s' }, { n: 'Potenze e cosφ', a: 3054, q: 32, ms: '1 s' }, { n: 'Energia', a: 3204, q: 4, ms: '10 s' }
+];
+function f32(v) { const b = new DataView(new ArrayBuffer(4)); b.setFloat32(0, v, false); return [0, 1, 2, 3].map(i => b.getUint8(i)); }
+function mbFrame(m, E) {
+  const b = BLOCKS[mbRR % 3]; mbRR++; const t = tid++ & 0xFFFF, e = E[m.id], pdu = b.a - 1;
+  const req = [t >> 8, t & 255, 0, 0, 0, 6, m.unit, 3, pdu >> 8, pdu & 255, 0, b.q];
+  const data = []; let dec = '';
+  if (b.a === 3000) { [e.i[0], e.i[1], e.i[2], (e.i[0] + e.i[1] + e.i[2]) / 3 * .02, 0, (e.i[0] + e.i[1] + e.i[2]) / 3].forEach(v => data.push(...f32(v))); dec = `3000 I1=${fmt(e.i[0], 1)} A · 3002 I2=${fmt(e.i[1], 1)} A · 3004 I3=${fmt(e.i[2], 1)} A`; }
+  else if (b.a === 3054) { const arr = new Array(32).fill(0); const put = (r, v) => { const bs = f32(v); arr[(r - 3054) * 2] = bs[0]; arr[(r - 3054) * 2 + 1] = bs[1]; arr[(r - 3054) * 2 + 2] = bs[2]; arr[(r - 3054) * 2 + 3] = bs[3]; }; put(3054, e.p / 3); put(3056, e.p / 3); put(3058, e.p / 3); put(3060, e.p); put(3068, e.q); put(3076, e.s); put(3084, e.pf); data.push(...arr.slice(0, 64)); dec = `3060 P=${fmt(e.p, 2)} kW · 3068 Q=${fmt(e.q, 2)} kVAR · 3076 S=${fmt(e.s, 2)} kVA · 3084 PF=${fmt(e.pf, 3)}`; }
+  else { const wh = Math.round((1.2e6 + monthToDate().reduce((s, d) => s + (m.id === 'M01' ? stats(d).kwh : m.id === 'M09' ? stats(d).pvk : stats(d).grp[m.id] || 0), 0)) * 1000); const lo = wh % 4294967296, hi = Math.floor(wh / 4294967296); [lo, hi].forEach(w => data.push((w >>> 24) & 255, (w >>> 16) & 255, (w >>> 8) & 255, w & 255)); dec = `3204 Energia attiva = ${fmt(wh / 1000, 1)} kWh (UInt64: low32 + high32 × 2³²)`; }
+  const bc = data.length, res = [t >> 8, t & 255, 0, 0, 0, bc + 3, m.unit, 3, bc, ...data];
+  return { req, res, dec, b };
+}
+function mbTick(E) {
+  const ts = hhmm(SIM.t) + ':' + pad(new Date(SIM.t).getSeconds());
+  const live = MT.filter(m => !(m.id === 'M06' && scOn('comm', SIM.t))), all = MT; let m = all[mbRR % all.length]; const idx = Math.floor(mbRR / 3) % MT.length; m = MT[idx];
+  const st = MB[m.id], off = m.id === 'M06' && scOn('comm', SIM.t);
+  if (off) { st.err++; st.lat = 1000; st.q = Math.max(60, st.q - .6); mbRR++; mbLog.push(`<div class="er"><span class="ts">${ts}</span> ✕ ${m.id} ${m.ip} unit ${m.unit} · timeout 1000 ms, nessuna risposta dal gateway</div>`); }
+  else { const f = mbFrame(m, E); st.ok++; st.lat = Math.max(4, (m.via.startsWith('Gateway') ? 62 : 11) + (Math.random() - .5) * 8); st.q = Math.min(99.9, st.q + .03); st.last = SIM.t;
+    mbLog.push(`<div class="tx"><span class="ts">${ts}</span> → ${m.id} ${m.ip}:502 ${hx(f.req)}</div><div class="rx"><span class="ts">${ts}</span> ← ${hx(f.res.slice(0, 22))}${f.res.length > 22 ? ' …' : ''}</div><div class="dc">${f.dec}</div>`); }
+  if (mbLog.length > 40) mbLog.splice(0, mbLog.length - 40);
+  if (page === 'modbus') { const lg = $('#mlog'); lg.innerHTML = mbLog.join(''); }
+}
+function buildArch() {
+  const nd = (t, s) => `<div class="node"><b>${t}</b><span>${s}</span></div>`, lk = r => `<div class="link${r ? ' rev' : ''}"></div>`;
+  $('#arch').innerHTML = nd('10 power meter', 'PM5560 · PM5340 · PM2230 · iEM3255') + lk(1) + nd('Switch e gateway', 'Ethernet · Modbus TCP→RTU') + lk(1) + nd('Collettore edge', 'master Modbus TCP · buffer') + lk(0) + nd('Database serie storiche', 'campioni a 1 s e 15 min') + lk(0) + nd('Questa web app', 'analisi e allarmi');
+}
+function renderMB() {
+  const E = lastE; if (!E) return;
+  $('#mbt').innerHTML = MT.map(m => { const s = MB[m.id], off = m.id === 'M06' && scOn('comm', SIM.t); return `<tr class="clk ${m.id === mbSel ? 'sel' : ''}" data-mb="${m.id}"><td class="mono">${m.id}</td><td>${m.loc}</td><td>${m.model}</td><td class="mono">${m.ip}</td><td class="num">${m.unit}</td><td>${m.via}</td><td><span class="pill ${off ? 'crit' : 'ok'}">${off ? 'Timeout' : 'Online'}</span></td><td class="mono">${off ? '> 1000' : fmt(s.lat, 0)} ms</td><td class="num"><span class="q"><u style="width:${s.q}%;background:${s.q < 95 ? 'var(--crit)' : 'var(--ok)'}"></u></span>${fmt(s.q, 1)} %</td><td class="num">${s.err}</td></tr>`; }).join('');
+  const m = MBY[mbSel], e = E[mbSel]; setT('regt', `Registri letti · ${m.id} ${m.short}`); setT('regs', `${m.model} · ${m.ip} · unit ${m.unit}`);
+  const R = [[3000, 'Corrente fase 1', 'Float32', fmt(e.i[0], 1) + ' A', '1 s'], [3002, 'Corrente fase 2', 'Float32', fmt(e.i[1], 1) + ' A', '1 s'], [3004, 'Corrente fase 3', 'Float32', fmt(e.i[2], 1) + ' A', '1 s'], [3028, 'Tensione L1-N', 'Float32', fmt(e.v[0], 1) + ' V', '1 s'], [3060, 'Potenza attiva totale', 'Float32', fmt(e.p, 2) + ' kW', '1 s'], [3068, 'Potenza reattiva totale', 'Float32', fmt(e.q, 2) + ' kVAR', '1 s'], [3076, 'Potenza apparente totale', 'Float32', fmt(e.s, 2) + ' kVA', '1 s'], [3084, 'Fattore di potenza totale', 'Float32', fmt(e.pf, 3), '1 s'], [3110, 'Frequenza', 'Float32', fmt(e.f, 2) + ' Hz', '1 s'], [3204, 'Energia attiva importata', 'UInt64 (4 reg.)', fmt(1.2e6 + monthToDate().reduce((s, d) => s + (mbSel === 'M01' ? stats(d).kwh : mbSel === 'M09' ? stats(d).pvk : stats(d).grp[mbSel] || 0), 0), 0) + ' kWh', '10 s']];
+  $('#regb').innerHTML = R.map(r => `<tr><td class="mono">${r[0]} <span style="color:var(--faint)">(PDU ${r[0] - 1})</span></td><td>${r[1]}</td><td class="mono">${r[2]}</td><td class="mono num">${r[3]}</td><td class="mono">${r[4]}</td></tr>`).join('');
+}
+
+/* ================= ALARMS PAGE ================= */
+function renderEvents() { $('#evs').innerHTML = LOG.slice(0, 7).map(e => `<li class="ev ${e.sev}"><time>${tfmt(e.t)}</time><i></i><span>${e.text}</span><span class="tg">${e.tag}</span></li>`).join(''); }
+function renderAlarms() {
+  const act = A.filter(a => a.active), cnt = s => act.filter(a => a.sev === s).length;
+  $('#acount').innerHTML = [['crit', 'Critici', 'var(--crit)'], ['warn', 'Avvisi', 'var(--warn)'], ['un', 'Da riconoscere', 'var(--accent)']].map(([k, l, c]) => `<div class="card"><b class="num" style="color:${c}">${k === 'un' ? act.filter(a => !a.ack).length : cnt(k)}</b><div><div style="font-weight:600">${l}</div><small>${k === 'un' ? 'in attesa di presa visione' : 'attivi adesso'}</small></div></div>`).join('');
+  $('#afilter').innerHTML = [['attivi', 'Attivi'], ['storico', 'Storico'], ['tutti', 'Tutti']].map(([k, l]) => `<button class="chipb" data-f="${k}" aria-pressed="${k === filter}">${l}</button>`).join('');
+  const list = A.filter(a => filter === 'tutti' || (filter === 'attivi' ? a.active : !a.active));
+  $('#alist').innerHTML = list.length ? list.map(a => `<div class="arow ${a.sev} ${a.active && !a.ack ? 'un' : ''} ${a.active ? '' : 'cleared'}"><span class="st"></span><time>${tfmt(a.t0)}</time><div class="tx"><b>${a.text}</b><small>${a.tag}${a.active ? '' : ' · rientrato ' + tfmt(a.t1)}</small></div><div class="acts">${a.active ? (a.ack ? '<span class="pill ok">Riconosciuto</span>' : `<button class="btn" data-ack="${a.id}">Riconosci</button>`) : '<span class="pill">Chiuso</span>'}</div></div>`).join('') : `<div class="empty">${filter === 'attivi' ? 'Nessun allarme attivo. Apri “Scenari demo” in alto per simulare un picco di potenza, un cosφ basso o una perdita di comunicazione Modbus.' : 'Nessun evento da mostrare.'}</div>`;
+  $('#ackall').disabled = !act.some(a => !a.ack);
+}
+
+/* ================= NAV / THEME / SIM / TOAST ================= */
+const ICON = {
+  panoramica: '<rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/>',
+  unifilare: '<path d="M12 3v6M12 9l-6 4v8M12 9l6 4v8M6 13h12"/><circle cx="12" cy="3" r="0.5"/>',
+  analisi: '<path d="M3 20h18M6 16v-5M11 16V6M16 16v-8M21 16v-3"/>',
+  modbus: '<rect x="3" y="4" width="18" height="6" rx="1.5"/><rect x="3" y="14" width="18" height="6" rx="1.5"/><path d="M7 7h.01M7 17h.01M12 10v4"/>',
+  allarmi: '<path d="M6 16V11a6 6 0 1112 0v5l1.5 2h-15z"/><path d="M10 21h4"/>',
+  sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M5 19l1.5-1.5M17.5 6.5L19 5"/>',
+  moon: '<path d="M20 14.5A8.5 8.5 0 019.5 4 8.5 8.5 0 1020 14.5z"/>'
+};
+const PAGES = [['panoramica', 'Panoramica'], ['unifilare', 'Unifilare'], ['analisi', 'Analisi'], ['modbus', 'Modbus'], ['allarmi', 'Allarmi']];
+let page = 'panoramica', lastE = null;
+function buildNav() {
+  const btn = ([k, l]) => `<button class="nav" data-go="${k}" aria-label="${l}"><svg viewBox="0 0 24 24">${ICON[k]}</svg>${l}${k === 'allarmi' ? '<span class="badge" hidden>0</span>' : ''}</button>`;
+  $('#rail').innerHTML = `<div class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg></div>` + PAGES.map(btn).join('');
+  $('#tabbar').innerHTML = PAGES.map(btn).join('');
+}
+function go(p, push = true) {
+  if (!PAGES.some(x => x[0] === p)) p = 'panoramica'; page = p;
+  $$('.page').forEach(s => s.hidden = s.id !== 'p-' + p);
+  $$('.nav').forEach(n => n.setAttribute('aria-current', n.dataset.go === p ? 'page' : 'false'));
+  if (push) { try { history.replaceState(null, '', '#' + p); } catch (e) {} }
+  closeDrawer(); window.scrollTo(0, 0); redraw();
+  if (p === 'analisi') { showATab(); startScope(); }
+  if (p === 'modbus') { renderMB(); $('#mlog').innerHTML = mbLog.join(''); }
+}
+function applyTheme(t) {
+  if (t) document.documentElement.dataset.theme = t;
+  const dark = (document.documentElement.dataset.theme || (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark')) === 'dark';
+  $('#themeico').innerHTML = dark ? ICON.sun : ICON.moon;
+}
+const SCEN = [['peak', 'Picco di potenza', 'Forni, abbattitori e compressori ripartono insieme: il prelievo supera la potenza impegnata'], ['pf', 'Cosφ basso', 'Batteria di rifasamento KB-02 fuori servizio: cala il cosφ e sale la reattiva'], ['comm', 'Perdita comunicazione Modbus', 'Il power meter M06 non risponde via gateway'], ['leak', 'Perdita aria compressa', 'Il compressore resta in carico per le perdite in rete: sale il prelievo rispetto alla baseline'], ['phase', 'Squilibrio fasi', 'Correnti sbilanciate sul quadro Surgelazione']];
+function buildSim() {
+  $('#simmenu').innerHTML = '<h4>Velocità del tempo simulato</h4><div class="speed">' + [1, 60, 600].map(s => `<button class="chipb" data-speed="${s}" aria-pressed="${SIM.speed === s}">${s === 1 ? 'Tempo reale' : '× ' + s}</button>`).join('') + '</div><hr><h4>Scenari</h4>' +
+    SCEN.map(([k, t, d]) => { const on = SC[k] && SC[k].end == null; return `<button class="it ${on ? 'on' : ''}" data-sim="${k}"><span><b>${t}</b><small>${d}</small></span><span class="tick">${on ? '!' : ''}</span></button>`; }).join('') + '<hr><button class="it" data-sim="reset"><span><b>Ripristina tutto</b><small>Chiude gli scenari attivi</small></span></button>';
+}
+function sim(k) {
+  if (k === 'reset') { Object.keys(SC).forEach(x => { if (SC[x] && SC[x].end == null) SC[x].end = SIM.t; }); toast('ok', 'Scenari chiusi: l\'impianto torna alla marcia normale'); }
+  else if (SC[k] && SC[k].end == null) SC[k].end = SIM.t; else SC[k] = { start: SIM.t, end: null };
+  buildSim(); todayMemo.k = ''; tick(true);
+}
+function toast(sev, text) {
+  const el = document.createElement('div'); el.className = 'toast ' + sev; el.setAttribute('role', 'status');
+  el.innerHTML = `<span class="st"></span><div><b>${{ crit: 'Allarme critico', warn: 'Avviso', ok: 'Informazione' }[sev]}</b><span>${text}</span></div>`;
+  $('#toasts').prepend(el); while ($('#toasts').children.length > 3) $('#toasts').lastChild.remove();
+  setTimeout(() => { el.classList.add('out'); setTimeout(() => el.remove(), 320); }, 6500);
+}
+
+/* ================= MAIN LOOP ================= */
+function redraw() { if (page === 'panoramica') drawStack(); }
+function render(E) {
+  lastE = E;
+  setT('clk', hhmm(SIM.t)); setT('clkd', new Date(SIM.t).toLocaleDateString('it-IT', { weekday: 'short', day: 'numeric', month: 'short' })); setT('spd', SIM.speed > 1 ? '×' + SIM.speed : '');
+  const act = A.filter(a => a.active), un = act.filter(a => !a.ack), ch = $('#alchip');
+  ch.className = 'ibtn alchip' + (un.some(a => a.sev === 'crit') ? ' crit' : act.length ? ' warn' : '');
+  setT('alnum', act.length ? act.length + (act.length === 1 ? ' allarme attivo' : ' allarmi attivi') : 'Nessun allarme');
+  $$('.nav .badge').forEach(b => { b.hidden = !un.length; b.textContent = un.length; });
+  if ($('#evs')._rev !== rev) { $('#evs')._rev = rev; renderEvents(); renderAlarms(); }
+  if (page === 'panoramica') { overview(E); drawStack(); renderInsights(E); }
+  if (page === 'unifilare') updateUL(E);
+  if (page === 'analisi') renderAnalisi(E);
+  if (page === 'modbus') renderMB();
+  updateDrawer(E);
+}
+function tick(force) {
+  if (!force) SIM.t += SIM.speed * 1000;
+  const E = snapshot(SIM.t); pfH.push(E.M01.p > 150 ? E.M01.pf : pfH[pfH.length - 1] || .95); if (pfH.length > 60) pfH.shift();
+  evaluate(E); mbTick(E); render(E);
+}
+
+/* ================= INIT ================= */
+buildNav(); buildUL(); buildAnalisi(); buildArch(); buildLegend(); buildSim(); bindStack();
+document.addEventListener('click', e => {
+  const g = e.target.closest('[data-go]'); if (g) { go(g.dataset.go); return; }
+  const q = e.target.closest('[data-ack]'); if (q) { const a = A.find(x => x.id === q.dataset.ack && x.active); if (a) { a.ack = true; rev++; render(lastE); } return; }
+  const f = e.target.closest('[data-f]'); if (f) { filter = f.dataset.f; rev++; render(lastE); return; }
+  const sp = e.target.closest('[data-speed]'); if (sp) { SIM.speed = +sp.dataset.speed; buildSim(); return; }
+  const sm = e.target.closest('[data-sim]'); if (sm) { sim(sm.dataset.sim); return; }
+  const at = e.target.closest('[data-at]'); if (at) { atab = at.dataset.at; showATab(); startScope(); return; }
+  const pq = e.target.closest('[data-pq]'); if (pq) { pqId = pq.dataset.pq; $$('#pqsel .chipb').forEach(b => b.setAttribute('aria-pressed', b.dataset.pq === pqId)); renderAnalisi(lastE); return; }
+  const mb = e.target.closest('[data-mb]'); if (mb) { mbSel = mb.dataset.mb; renderMB(); return; }
+  if (!e.target.closest('.simwrap')) { $('#simmenu').hidden = true; $('#simbtn').setAttribute('aria-expanded', 'false'); }
+  const eq = e.target.closest('.eq[data-m]'); if (eq) openMeter(eq.dataset.m);
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') { closeDrawer(); $('#simmenu').hidden = true; }
+  if ((e.key === 'Enter' || e.key === ' ') && e.target.matches && e.target.matches('.eq[data-m]')) { e.preventDefault(); openMeter(e.target.dataset.m); }
+});
+$('#scrim').onclick = closeDrawer;
+$('#simbtn').onclick = e => { e.stopPropagation(); const m = $('#simmenu'); m.hidden = !m.hidden; $('#simbtn').setAttribute('aria-expanded', String(!m.hidden)); };
+$('#alchip').onclick = () => go('allarmi');
+$('#ackall').onclick = () => { A.forEach(a => { if (a.active) a.ack = true; }); rev++; render(lastE); };
+$('#themebtn').onclick = () => { const cur = document.documentElement.dataset.theme || (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'); const n = cur === 'dark' ? 'light' : 'dark'; store.set('energy-theme', n); applyTheme(n); render(lastE); };
+const saved = store.get('energy-theme'); if (saved) document.documentElement.dataset.theme = saved; applyTheme();
+new ResizeObserver(() => { if (lastE) { redraw(); if (page === 'analisi') renderAnalisi(lastE); } }).observe(document.body);
+for (let i = 0; i < 30; i++) pfH.push(.93 + Math.random() * .03);
+tick(true);
+go((location.hash || '').slice(1) || 'panoramica', false);
+setInterval(() => tick(false), 1000);
+window.__energy = { SIM, SC, sim, go, tick, A, setAtab: k => { atab = k; showATab(); startScope(); } };
+})();
+</script>
+</body>
+</html>
